@@ -1,0 +1,21 @@
+{
+  "name": "@sebastian/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "seb": "./src/main.ts"
+  },
+  "scripts": {
+    "seb": "node src/main.ts",
+    "typecheck": "tsc -p .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sebastian/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "vitest": "^4.1.0"
+  }
+}

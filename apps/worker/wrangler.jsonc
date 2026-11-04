@@ -1,0 +1,43 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "sebastian",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "sebastian.baltar.media", "custom_domain": true }],
+  "observability": { "enabled": true },
+
+  "durable_objects": {
+    "bindings": [{ "name": "INSTALL", "class_name": "InstallDO" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["InstallDO"] }],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sebastian",
+      // Created 2026-11-04 (ENAM).
+      "database_id": "3b11b032-333f-46ae-bb6c-2002a34ac290",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "triggers": {
+    // Token health + ledger rollup every 30 min; retention daily at 09:17 UTC.
+    "crons": ["*/30 * * * *", "17 9 * * *"]
+  },
+
+  "vars": {
+    "PUBLIC_ORIGIN": "https://sebastian.baltar.media",
+    // Zero Trust team domain, without https:// — e.g. "baltar.cloudflareaccess.com".
+    // Zero Trust > Settings > Team name and domain.
+    "ACCESS_TEAM_DOMAIN": "erodewald.cloudflareaccess.com",
+    // Application Audience (AUD) tag: Zero Trust > Access controls > Applications >
+    // (sebastian.baltar.media) > Edit > Additional settings.
+    "ACCESS_AUD": "e10a7bc2a94f3407de29483f033a0cb2ddce9ad6edf8901bf188330028a0ec02",
+    "ST_SCOPES": "r:devices:* x:devices:* r:locations:* w:locations:* x:locations:* r:scenes:* x:scenes:* r:rules:* w:rules:* r:hubs:* r:installedapps sse",
+    "USER_AGENT": "sebastian/0.0 (+https://github.com/erodewald/sebastian)"
+  }
+  // Secrets (wrangler secret put): ST_CLIENT_ID, ST_CLIENT_SECRET, DATA_KEY (base64, 32 bytes)
+}
