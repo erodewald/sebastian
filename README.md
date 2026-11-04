@@ -26,7 +26,7 @@ pnpm check       # biome + st-host guard, typecheck, unit + Workers-runtime test
 ## First deploy (PLAN §13)
 
 1. **Cloudflare Zero Trust.** Add PocketID as a generic OIDC IdP and enable one-time PIN. Create an Access app for `sebastian.baltar.media` with policies for you, `seb-cli` and `seb-ci`. Put the team domain and AUD tag in `apps/worker/wrangler.jsonc` (`ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`).
-2. **D1.** Run `wrangler d1 create sebastian` and paste the `database_id` into `wrangler.jsonc`.
+2. **D1.** Done: `sebastian` (`3b11b032-…`, ENAM) is created and wired into `wrangler.jsonc`. Migrations run on first deploy.
 3. **SmartThings Developer Center.** Register an API Access App with redirect `https://sebastian.baltar.media/oauth/callback`, CORS domain `sebastian.baltar.media`, and the scopes in `ST_SCOPES`.
 4. **Secrets:**
 

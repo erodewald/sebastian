@@ -17,8 +17,8 @@
     {
       "binding": "DB",
       "database_name": "sebastian",
-      // Fill in after `wrangler d1 create sebastian`.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // Created 2026-11-04 (ENAM).
+      "database_id": "3b11b032-333f-46ae-bb6c-2002a34ac290",
       "migrations_dir": "migrations"
     }
   ],
@@ -30,9 +30,11 @@
 
   "vars": {
     "PUBLIC_ORIGIN": "https://sebastian.baltar.media",
-    // e.g. "baltar.cloudflareaccess.com" — your Zero Trust team domain.
+    // Zero Trust team domain, without https:// — e.g. "baltar.cloudflareaccess.com".
+    // Zero Trust > Settings > Team name and domain.
     "ACCESS_TEAM_DOMAIN": "REPLACE_ME.cloudflareaccess.com",
-    // Application Audience (AUD) tag from the Access application.
+    // Application Audience (AUD) tag: Zero Trust > Access controls > Applications >
+    // (sebastian.baltar.media) > Edit > Additional settings.
     "ACCESS_AUD": "REPLACE_ME",
     "ST_SCOPES": "r:devices:* x:devices:* r:locations:* w:locations:* x:locations:* r:scenes:* x:scenes:* r:rules:* w:rules:* r:hubs:* r:installedapps:* sse",
     "USER_AGENT": "sebastian/0.0 (+https://github.com/erodewald/sebastian)"
