@@ -32,7 +32,7 @@
     "PUBLIC_ORIGIN": "https://sebastian.baltar.media",
     // Zero Trust team domain, without https:// — e.g. "baltar.cloudflareaccess.com".
     // Zero Trust > Settings > Team name and domain.
-    "ACCESS_TEAM_DOMAIN": "REPLACE_ME.cloudflareaccess.com",
+    "ACCESS_TEAM_DOMAIN": "erodewald.cloudflareaccess.com",
     // Application Audience (AUD) tag: Zero Trust > Access controls > Applications >
     // (sebastian.baltar.media) > Edit > Additional settings.
     "ACCESS_AUD": "REPLACE_ME",
