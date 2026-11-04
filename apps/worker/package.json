@@ -1,0 +1,25 @@
+{
+  "name": "@sebastian/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "cf-typegen": "wrangler types",
+    "typecheck": "tsc -p .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sebastian/protocol": "workspace:*",
+    "@sebastian/st-types": "workspace:*",
+    "hono": "^4.13.16",
+    "jose": "^6.2.15"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.5.1",
+    "@cloudflare/workers-types": "^5.20261104.1",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.157.0"
+  }
+}

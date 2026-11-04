@@ -1,0 +1,41 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "sebastian",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "sebastian.baltar.media", "custom_domain": true }],
+  "observability": { "enabled": true },
+
+  "durable_objects": {
+    "bindings": [{ "name": "INSTALL", "class_name": "InstallDO" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["InstallDO"] }],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sebastian",
+      // Fill in after `wrangler d1 create sebastian`.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "triggers": {
+    // Token health + ledger rollup every 30 min; retention daily at 09:17 UTC.
+    "crons": ["*/30 * * * *", "17 9 * * *"]
+  },
+
+  "vars": {
+    "PUBLIC_ORIGIN": "https://sebastian.baltar.media",
+    // e.g. "baltar.cloudflareaccess.com" — your Zero Trust team domain.
+    "ACCESS_TEAM_DOMAIN": "REPLACE_ME.cloudflareaccess.com",
+    // Application Audience (AUD) tag from the Access application.
+    "ACCESS_AUD": "REPLACE_ME",
+    "ST_SCOPES": "r:devices:* x:devices:* r:locations:* w:locations:* x:locations:* r:scenes:* x:scenes:* r:rules:* w:rules:* r:hubs:* r:installedapps:* sse",
+    "USER_AGENT": "sebastian/0.0 (+https://github.com/erodewald/sebastian)"
+  }
+  // Secrets (wrangler secret put): ST_CLIENT_ID, ST_CLIENT_SECRET, DATA_KEY (base64, 32 bytes)
+}
