@@ -1,0 +1,32 @@
+# SmartThings API Access app for Sebastian (PLAN §13 step 2).
+# Create with:  smartthings smartapps:create -O <your-default-org-id> -i infra/smartthings-app.yaml
+# No apiOnly.targetUrl => no webhook, so no CONFIRMATION handshake (ADR-001: SSE only, nothing inbound).
+# Keep oauth.scope in sync with ST_SCOPES in apps/worker/wrangler.jsonc.
+displayName: Sebastian
+description: Hub-first automations-as-code. Compiles typed automations to local Rules on the hub.
+appName: sebastian-da85282a-95a8-41df-bbdc-e5b1b2f56764
+appType: API_ONLY
+classifications:
+  - CONNECTED_SERVICE
+singleInstance: true
+principalType: LOCATION
+apiOnly: {}
+oauth:
+  clientName: Sebastian
+  scope:
+    - r:devices:*
+    - x:devices:*
+    - r:hubs:*
+    - r:locations:*
+    - w:locations:*
+    - x:locations:*
+    - r:scenes:*
+    - x:scenes:*
+    - r:rules:*
+    - w:rules:*
+    - r:installedapps
+    - sse
+  redirectUris:
+    - https://sebastian.baltar.media/oauth/callback
+  corsDomains:
+    - https://sebastian.baltar.media
