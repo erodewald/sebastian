@@ -2,9 +2,12 @@
 # Create with:  smartthings smartapps:create -O <your-default-org-id> -i infra/smartthings-app.yaml
 # No apiOnly.targetUrl => no webhook, so no CONFIRMATION handshake (ADR-001: SSE only, nothing inbound).
 # Keep oauth.scope in sync with ST_SCOPES in apps/worker/wrangler.jsonc.
+# appName must be globally unique and stays reserved after the app is deleted; if create fails with
+# "app with this name already exists", replace the UUID suffix (e.g. `uuidgen | tr A-Z a-z`).
+# Lost the client secret? Don't recreate: `smartthings smartapps:oauth:generate <appId>` issues a new pair.
 displayName: Sebastian
 description: Hub-first automations-as-code. Compiles typed automations to local Rules on the hub.
-appName: sebastian-da85282a-95a8-41df-bbdc-e5b1b2f56764
+appName: sebastian-2e571145-623c-46c2-9d89-6c250062435e
 appType: API_ONLY
 classifications:
   - CONNECTED_SERVICE
