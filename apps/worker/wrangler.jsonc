@@ -35,7 +35,7 @@
     "ACCESS_TEAM_DOMAIN": "erodewald.cloudflareaccess.com",
     // Application Audience (AUD) tag: Zero Trust > Access controls > Applications >
     // (sebastian.baltar.media) > Edit > Additional settings.
-    "ACCESS_AUD": "REPLACE_ME",
+    "ACCESS_AUD": "e10a7bc2a94f3407de29483f033a0cb2ddce9ad6edf8901bf188330028a0ec02",
     "ST_SCOPES": "r:devices:* x:devices:* r:locations:* w:locations:* x:locations:* r:scenes:* x:scenes:* r:rules:* w:rules:* r:hubs:* r:installedapps:* sse",
     "USER_AGENT": "sebastian/0.0 (+https://github.com/erodewald/sebastian)"
   }
