@@ -4,7 +4,7 @@
 
 ## Decision
 
-- One **self-hosted, public-hostname** Access application covers `sebastian.baltar.media/*`, deny by default. It is deliberately *not* a Worker-destination app: those don't support WebSocket upgrades (needed for StreamDO fan-out to `seb tail` and the UI), and they need the Worker to exist before the app does. Policies:
+- One **self-hosted, public-hostname** Access application covers `sebastian.baltar.media/*`, deny by default. It is deliberately _not_ a Worker-destination app: those don't support WebSocket upgrades (needed for StreamDO fan-out to `seb tail` and the UI), and they need the Worker to exist before the app does. Policies:
   - your PocketID identity (generic OIDC; redirect `https://<team>.cloudflareaccess.com/cdn-cgi/access/callback`);
   - service tokens `seb-cli` and `seb-ci`;
   - one-time PIN to your email as **break-glass** when the homelab (and therefore PocketID) is down.
