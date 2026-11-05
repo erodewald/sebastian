@@ -4,7 +4,8 @@
 # server_error and uninstalls with TargetUnconfirmed. After create/update run
 #   smartthings smartapps:confirm <appId>
 # and the Worker answers the CONFIRMATION at /st/lifecycle (ADR-001, amended).
-# Keep oauth.scope in sync with ST_SCOPES in apps/worker/wrangler.jsonc.
+# ST_SCOPES (apps/worker/wrangler.jsonc) must be a subset of oauth.scope. The scenes scopes are
+# registered here but not requested: authorize fails with server_error when they are (2026-11-05).
 # appName must be globally unique and stays reserved after the app is deleted; if create fails with
 # "app with this name already exists", replace the UUID suffix (e.g. `uuidgen | tr A-Z a-z`).
 # Lost the client secret? Don't recreate: `smartthings smartapps:oauth:generate <appId>` issues a new pair.
