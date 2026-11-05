@@ -67,15 +67,15 @@ describe('routeTemplate', () => {
 });
 
 describe('authorizeUrl', () => {
-  it('space-separates scopes (sent as +), never a literal %2B', () => {
+  it('space-separates scopes, encoded as %20 (never + or %2B)', () => {
     const u = authorizeUrl({
       clientId: 'c',
       redirectUri: 'https://x.test/cb',
       scopes: 'r:devices:* x:devices:*  sse',
       state: 's',
     });
-    expect(u).toContain('scope=r%3Adevices%3A*+x%3Adevices%3A*+sse');
-    expect(u).not.toContain('%2B');
+    expect(u).toContain('scope=r%3Adevices%3A*%20x%3Adevices%3A*%20sse');
+    expect(u).not.toMatch(/\+|%2B/);
     expect(new URL(u).searchParams.get('scope')).toBe('r:devices:* x:devices:* sse');
   });
   it('parses space, comma and + separated lists', () => {
