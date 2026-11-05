@@ -1,6 +1,9 @@
 # SmartThings API Access app for Sebastian (PLAN §13 step 2).
 # Create with:  smartthings smartapps:create -O <your-default-org-id> -i infra/smartthings-app.yaml
-# No apiOnly.targetUrl => no webhook, so no CONFIRMATION handshake (ADR-001: SSE only, nothing inbound).
+# apiOnly.targetUrl: without a confirmed target we saw installs fail with
+# server_error and uninstalls with TargetUnconfirmed. After create/update run
+#   smartthings smartapps:confirm <appId>
+# and the Worker answers the CONFIRMATION at /st/lifecycle (ADR-001, amended).
 # Keep oauth.scope in sync with ST_SCOPES in apps/worker/wrangler.jsonc.
 # appName must be globally unique and stays reserved after the app is deleted; if create fails with
 # "app with this name already exists", replace the UUID suffix (e.g. `uuidgen | tr A-Z a-z`).
@@ -13,7 +16,8 @@ classifications:
   - CONNECTED_SERVICE
 singleInstance: true
 principalType: LOCATION
-apiOnly: {}
+apiOnly:
+  targetUrl: https://sebastian.baltar.media/st/lifecycle
 oauth:
   clientName: Sebastian
   scope:
