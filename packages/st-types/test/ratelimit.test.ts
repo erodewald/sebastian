@@ -67,15 +67,16 @@ describe('routeTemplate', () => {
 });
 
 describe('authorizeUrl', () => {
-  it('joins scopes with a literal + (sent as %2B), like the SmartThings CLI', () => {
+  it('space-separates scopes, encoded as %20 (never + or %2B)', () => {
     const u = authorizeUrl({
       clientId: 'c',
       redirectUri: 'https://x.test/cb',
       scopes: 'r:devices:* x:devices:*  sse',
       state: 's',
     });
-    expect(u).toContain('scope=r%3Adevices%3A*%2Bx%3Adevices%3A*%2Bsse');
-    expect(new URL(u).searchParams.get('scope')).toBe('r:devices:*+x:devices:*+sse');
+    expect(u).toContain('scope=r%3Adevices%3A*%20x%3Adevices%3A*%20sse');
+    expect(u).not.toMatch(/\+|%2B/);
+    expect(new URL(u).searchParams.get('scope')).toBe('r:devices:* x:devices:* sse');
   });
   it('parses space, comma and + separated lists', () => {
     expect(parseScopes('a b,c+d')).toEqual(['a', 'b', 'c', 'd']);

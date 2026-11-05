@@ -71,7 +71,7 @@ describe('OAuth install flow', () => {
     expect(loc.searchParams.get('redirect_uri')).toBe(
       'https://sebastian.baltar.media/oauth/callback',
     );
-    expect(loc.searchParams.get('scope')).toContain('r:devices:*+');
+    expect(loc.searchParams.get('scope')).toContain('r:devices:* ');
     const state = loc.searchParams.get('state')!;
 
     await wire(stubFor(OAUTH_DO_NAME), () => json(tokens(1, { installed_app_id: 'ia-flow' })));
@@ -107,7 +107,7 @@ describe('/oauth/start scope override', () => {
     const res = await call('/oauth/start?scope=r:devices:*%20r:locations:*', token);
     expect(res.status).toBe(302);
     const loc = new URL(res.headers.get('location')!);
-    expect(loc.searchParams.get('scope')).toBe('r:devices:*+r:locations:*');
+    expect(loc.searchParams.get('scope')).toBe('r:devices:* r:locations:*');
   });
   it('refuses scopes outside ST_SCOPES', async () => {
     const token = await jwt({ email: 'e@x', sub: 'u1' });

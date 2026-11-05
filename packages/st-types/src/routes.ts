@@ -16,8 +16,9 @@ export function parseScopes(scopes: string): string[] {
 }
 
 /**
- * SmartThings expects scopes joined with a literal `+` (sent as `%2B`), as the official CLI
- * does, not the RFC 6749 space separator (sent as `+`, which decodes to a space).
+ * Scopes are space-separated (RFC 6749). The space is sent as `%20`, never `+`: `+` only means a
+ * space under form decoding, and a literal `+` (`%2B`) is not a separator either — SmartThings
+ * answers `invalid_scope: unable to build scope from a+b+c` (observed 2026-11-05).
  */
 export function authorizeUrl(p: {
   clientId: string;
@@ -30,7 +31,7 @@ export function authorizeUrl(p: {
   u.searchParams.set('client_id', p.clientId);
   u.searchParams.set('response_type', 'code');
   u.searchParams.set('redirect_uri', p.redirectUri);
-  u.searchParams.set('scope', scopes.join('+'));
   u.searchParams.set('state', p.state);
-  return u.toString();
+  // URLSearchParams would encode the spaces as `+`; build this one parameter by hand.
+  return `${u.toString()}&scope=${scopes.map(encodeURIComponent).join('%20')}`;
 }
