@@ -64,10 +64,10 @@ Sources: blog.smartthings.com (Oct 30 2026 "API Additional Details" post), devel
 - `API_ONLY` app without `apiOnly.targetUrl`: create succeeds, but reads log `ApiOnly app not found`, uninstalls fail `417 TargetUnconfirmed`, and broad authorizations fail with `server_error`. Give it a target and confirm it (`smartapps:confirm` → CONFIRMATION → GET `confirmationUrl`).
 - `smartapps:confirm` returns 202 even when delivery fails. Check `targetStatus` (`PENDING` → `CONFIRMED`).
 - Authorize `scope` is space-separated. A literal `+` gives `invalid_scope: unable to build scope from a+b`.
-- Scope combinations failing with `server_error` (each scope alone works): `r:scenes:*`+`x:scenes:*`; the 9 working scopes + `r:installedapps`. Home Assistant requests those same combinations successfully, so this is likely specific to the app.
-- Each successful authorization creates a new installed app (`singleInstance` not enforced for `API_ONLY`). The CLI `installedapps` list omits `API_ONLY` installs; `installedapps <id>` and `installedapps:delete <id>` work.
+- Scope combinations failing with `server_error`: `r:scenes:*`+`x:scenes:*` (each alone works; unexplained, reported). The 9 working scopes + `r:installedapps` also fails, because `r:installedapps` isn't a valid scope: the documented scope table has none, and the platform developer said to do what the Developer Center does, which offers no installed-apps scopes. It should be rejected with `invalid_scope`, not `server_error`.
+- The CLI `installedapps` list omits `API_ONLY` installs; `installedapps <id>` and `installedapps:delete <id>` work. (Whether re-authorizing without deleting creates a second install despite `singleInstance` is untested.)
 - An app can read its own installed app (`GET /installedapps/{id}`) without `r:installedapps`.
-- CLI 3.0.0 scope picker has no `sse` and spells `r:installedapps` without `:*`; platform tokens use `r:installedapps:*`.
+- CLI 3.0.0 scope picker has no `sse` and offers `r:installedapps`/`w:installedapps`, which aren't valid API Access app scopes. Docs: OAuth endpoints are documented as `https://api.smartthings.com/v1/oauth/authorize` and `/v1/oauth/token`; we (like Home Assistant) use `/oauth/authorize` and `auth-global.api.smartthings.com/oauth/token`, which work.
 - Location "Bur Oak" has two hubs: SmartThings v2 Hub (fw 000.063.00001; 11 Zigbee, 5 Z-Wave, 5 LAN devices) and a SmartThings Station (fw 000.054.00013; 1 Zigbee, 1 LAN). A rule mixing devices from both hubs can't run locally.
 
 ## Hub v2 (2015)

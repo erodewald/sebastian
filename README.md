@@ -60,7 +60,7 @@ Steps 4–9 are in order: SmartThings has to be able to reach `/st/lifecycle` be
    ```
 8. **Confirm the target.** With `wrangler tail sebastian` running, run `smartthings smartapps:confirm <appId>`. The tail should show `{"stLifecycle":"CONFIRMATION"}` and then `{"stConfirmation":200}`. `smartthings smartapps <appId> -j` should then report `targetStatus: CONFIRMED`; `register` returns 202 even when delivery fails.
 9. **Install.** Open `https://sebastian.baltar.media/oauth/start` and pick the location. `?scope=a%20b` narrows the request to a subset of `ST_SCOPES`, for bisecting a `server_error`.
-   - Every successful authorization creates a **new** install, even though the app is single-instance.
+   - Delete an install before re-testing an authorization at the same location; each new authorization after a delete gets a new installedAppId.
    - `smartthings installedapps` doesn't list `API_ONLY` installs. D1's `installs` table does; delete stale ones with `smartthings installedapps:delete <id>`.
 10. **Check.** From the repo root on **Node ≥ 22.18** (the CLI runs its TypeScript directly), with `CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET` set: `pnpm --filter @sebastian/cli seb whoami`.
 
