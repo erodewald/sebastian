@@ -37,8 +37,8 @@
     // (sebastian.baltar.media) > Edit > Additional settings.
     "ACCESS_AUD": "e10a7bc2a94f3407de29483f033a0cb2ddce9ad6edf8901bf188330028a0ec02",
     // Scenes (r:scenes:* x:scenes:*) are registered on the app but NOT requested: asking for
-    // them makes SmartThings' authorize fail with server_error (bisected 2026-11-05). Revisit
-    // with the M2 scene-in-rule spike.
+    // both together makes SmartThings' authorize fail with server_error, though each alone works
+    // (bisected 2026-11-05). Revisit with the M2 scene-in-rule spike.
     "ST_SCOPES": "r:devices:* x:devices:* r:locations:* w:locations:* x:locations:* r:rules:* w:rules:* r:hubs:* r:installedapps sse",
     // SmartThings appId (not a secret); lifecycle CONFIRMATION is accepted only for this app.
     "ST_APP_ID": "dd2a50f8-3307-445b-afc5-c9150094bcc9",
