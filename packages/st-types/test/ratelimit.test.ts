@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  authorizeUrl,
   backoffMs,
   classifyStatus,
   normalizeResetMs,
   parseRateLimit,
+  parseScopes,
   routeTemplate,
 } from '../src/index.js';
 
@@ -61,5 +63,21 @@ describe('routeTemplate', () => {
     expect(
       routeTemplate('get', '/v1/devices/0a1b2c3d-1111-2222-3333-444455556666/status?x=1'),
     ).toBe('GET /devices/{id}/status');
+  });
+});
+
+describe('authorizeUrl', () => {
+  it('joins scopes with a literal + (sent as %2B), like the SmartThings CLI', () => {
+    const u = authorizeUrl({
+      clientId: 'c',
+      redirectUri: 'https://x.test/cb',
+      scopes: 'r:devices:* x:devices:*  sse',
+      state: 's',
+    });
+    expect(u).toContain('scope=r%3Adevices%3A*%2Bx%3Adevices%3A*%2Bsse');
+    expect(new URL(u).searchParams.get('scope')).toBe('r:devices:*+x:devices:*+sse');
+  });
+  it('parses space, comma and + separated lists', () => {
+    expect(parseScopes('a b,c+d')).toEqual(['a', 'b', 'c', 'd']);
   });
 });

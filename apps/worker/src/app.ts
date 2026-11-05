@@ -1,4 +1,4 @@
-import { authorizeUrl, type InstalledApp } from '@sebastian/st-types';
+import { authorizeUrl, type InstalledApp, parseScopes } from '@sebastian/st-types';
 import { type Context, Hono } from 'hono';
 import type { JWTVerifyGetKey } from 'jose';
 import { type AccessVars, accessAuth } from './access.js';
@@ -40,21 +40,42 @@ export function createApp(opts: { accessKeys?: JWTVerifyGetKey } = {}) {
   app.get('/healthz', (c) => c.json({ ok: true, identity: c.get('identity') }));
 
   // ── OAuth (PLAN §5.2). Both routes sit behind Access like everything else. ──
+  // `?scope=a+b` narrows the request to a subset of ST_SCOPES, to bisect scope problems
+  // at SmartThings without a redeploy. Scopes outside ST_SCOPES are refused.
   app.get('/oauth/start', async (c) => {
+    const allowed = parseScopes(c.env.ST_SCOPES);
+    const override = c.req.query('scope');
+    const scopes = override ? parseScopes(override) : allowed;
+    const unknown = scopes.filter((s) => !allowed.includes(s));
+    if (unknown.length || scopes.length === 0) {
+      return c.json(
+        { error: 'bad_request', detail: `scopes not in ST_SCOPES: ${unknown.join(' ')}` },
+        400,
+      );
+    }
     const state = await installStub(c.env, OAUTH_DO_NAME).issueState();
     return c.redirect(
       authorizeUrl({
         clientId: c.env.ST_CLIENT_ID,
         redirectUri: `${c.env.PUBLIC_ORIGIN}/oauth/callback`,
-        scopes: c.env.ST_SCOPES,
+        scopes,
         state,
       }),
     );
   });
 
   app.get('/oauth/callback', async (c) => {
-    const { code, state, error } = c.req.query();
-    if (error) return c.json({ error: 'authorization_denied', detail: error }, 400);
+    const { code, state, error, error_description: errorDescription } = c.req.query();
+    if (error) {
+      console.error(JSON.stringify({ oauthError: error, errorDescription }));
+      return c.json(
+        {
+          error: 'authorization_denied',
+          detail: errorDescription ? `${error}: ${errorDescription}` : error,
+        },
+        400,
+      );
+    }
     if (!code || !state)
       return c.json({ error: 'bad_request', detail: 'missing code or state' }, 400);
 

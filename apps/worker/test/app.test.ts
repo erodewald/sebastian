@@ -71,6 +71,7 @@ describe('OAuth install flow', () => {
     expect(loc.searchParams.get('redirect_uri')).toBe(
       'https://sebastian.baltar.media/oauth/callback',
     );
+    expect(loc.searchParams.get('scope')).toContain('r:devices:*+');
     const state = loc.searchParams.get('state')!;
 
     await wire(stubFor(OAUTH_DO_NAME), () => json(tokens(1, { installed_app_id: 'ia-flow' })));
@@ -97,5 +98,32 @@ describe('OAuth install flow', () => {
       locationId: 'loc-1',
       tokenState: 'ACTIVE',
     });
+  });
+});
+
+describe('/oauth/start scope override', () => {
+  it('narrows to a subset of ST_SCOPES', async () => {
+    const token = await jwt({ email: 'e@x', sub: 'u1' });
+    const res = await call('/oauth/start?scope=r:devices:*%20r:locations:*', token);
+    expect(res.status).toBe(302);
+    const loc = new URL(res.headers.get('location')!);
+    expect(loc.searchParams.get('scope')).toBe('r:devices:*+r:locations:*');
+  });
+  it('refuses scopes outside ST_SCOPES', async () => {
+    const token = await jwt({ email: 'e@x', sub: 'u1' });
+    const res = await call('/oauth/start?scope=w:devices:*', token);
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('/oauth/callback errors from SmartThings', () => {
+  it('surfaces error_description', async () => {
+    const token = await jwt({ email: 'e@x', sub: 'u1' });
+    const res = await call(
+      '/oauth/callback?error=server_error&error_description=Unexpected+server+error.&state=x',
+      token,
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ detail: 'server_error: Unexpected server error.' });
   });
 });
