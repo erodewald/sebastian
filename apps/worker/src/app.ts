@@ -4,6 +4,7 @@ import type { JWTVerifyGetKey } from 'jose';
 import { type AccessVars, accessAuth } from './access.js';
 import { type Env, installStub, OAUTH_DO_NAME } from './env.js';
 import { SEB_ERR, sebErrorCode } from './install-do.js';
+import { LIFECYCLE_PATH, registerLifecycle } from './lifecycle.js';
 import { st } from './st-client.js';
 import { whoami } from './whoami.js';
 
@@ -21,7 +22,10 @@ export async function currentInstallId(env: Env, override?: string): Promise<str
 export function createApp(opts: { accessKeys?: JWTVerifyGetKey } = {}) {
   const app = new Hono<AppEnv>();
 
-  app.use('*', accessAuth(opts.accessKeys ? { keys: opts.accessKeys } : {}));
+  // Every path requires Access except SmartThings' lifecycle target (see lifecycle.ts).
+  const access = accessAuth(opts.accessKeys ? { keys: opts.accessKeys } : {});
+  app.use('*', async (c, next) => (c.req.path === LIFECYCLE_PATH ? next() : access(c, next)));
+  registerLifecycle(app);
 
   app.onError((err, c) => {
     const code = sebErrorCode(err);

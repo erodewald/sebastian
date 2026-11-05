@@ -199,6 +199,34 @@ export class InstallDO extends DurableObject<Env> {
     return rows.length === 1;
   }
 
+  /**
+   * Complete SmartThings' target-URL CONFIRMATION by fetching its confirmationUrl. The URL
+   * must be on the SmartThings API host and name our own app, so a forged CONFIRMATION
+   * can't make the Worker fetch anything else. Used on the `__oauth__` instance.
+   */
+  async confirmRegistration(appId: string, confirmationUrl: string): Promise<number> {
+    let url: URL;
+    try {
+      url = new URL(confirmationUrl);
+    } catch {
+      throw new Error('confirmationUrl is not a URL');
+    }
+    const api = new URL(ST_API_ORIGIN);
+    if (url.protocol !== 'https:' || url.host !== api.host) {
+      throw new Error(`confirmationUrl host not allowed: ${url.host}`);
+    }
+    if (!url.pathname.includes(`/apps/${appId}/`)) {
+      throw new Error('confirmationUrl does not reference this app');
+    }
+    const res = await this.http(url.toString(), {
+      method: 'GET',
+      headers: { 'user-agent': this.env.USER_AGENT, accept: 'application/json' },
+    });
+    this.meter('auth', routeTemplate('GET', url.pathname), res.status >= 400);
+    await res.body?.cancel();
+    return res.status;
+  }
+
   /** Burn `state`, then exchange the authorization code. Used on the `__oauth__` instance. */
   async redeemCallback(state: string, code: string): Promise<TokenResponse> {
     if (!(await this.consumeState(state)))

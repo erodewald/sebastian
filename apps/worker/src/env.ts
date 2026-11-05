@@ -9,6 +9,8 @@ export interface Env {
   ACCESS_AUD: string;
   ST_SCOPES: string;
   USER_AGENT: string;
+  /** SmartThings appId; CONFIRMATION messages for any other app are refused. */
+  ST_APP_ID: string;
 
   // secrets
   ST_CLIENT_ID: string;

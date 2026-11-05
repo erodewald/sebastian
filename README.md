@@ -27,7 +27,9 @@ pnpm check       # biome + st-host guard, typecheck, unit + Workers-runtime test
 
 1. **Cloudflare Zero Trust.** Add PocketID as a generic OIDC IdP and enable one-time PIN. Create an Access app for `sebastian.baltar.media` with policies for you, `seb-cli` and `seb-ci`. Put the team domain and AUD tag in `apps/worker/wrangler.jsonc` (`ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`).
 2. **D1.** Done: `sebastian` (`3b11b032-…`, ENAM) is created and wired into `wrangler.jsonc`. Migrations run on first deploy.
-3. **SmartThings app.** `smartthings smartapps:create -O <default-org-id> -i infra/smartthings-app.yaml`. This creates an API-only app with no webhook, so there is no confirmation ping. It prints the OAuth client ID and secret once; save them straight into the Worker secrets. Keep `oauth.scope` there in sync with `ST_SCOPES`.
+3. **SmartThings app.** Run `smartthings smartapps:create -O <default-org-id> -i infra/smartthings-app.yaml`. It prints the OAuth client ID and secret once; save them straight into the Worker secrets. Set `ST_APP_ID` in `wrangler.jsonc` to the new app ID, and keep `oauth.scope` in sync with `ST_SCOPES`.
+   - **Access bypass.** Add a second Access application for `sebastian.baltar.media/st/lifecycle` with a **Bypass** policy (Everyone). This is the only public path.
+   - **Confirm.** After deploying, run `smartthings smartapps:confirm <appId>` so SmartThings confirms the lifecycle target (ADR-001 amendment).
 4. **Secrets:**
 
    ```bash
