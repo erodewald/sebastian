@@ -39,8 +39,8 @@
     // Scenes (r:scenes:* x:scenes:*) are registered on the app but NOT requested: asking for
     // both together makes SmartThings' authorize fail with server_error, though each alone works
     // (bisected 2026-11-05). Revisit with the M2 scene-in-rule spike.
-    // r:installedapps is also left out: the 10-scope set with it failed, the 9 without it installs,
-    // and the callback's own GET /installedapps/{id} works without it.
+    // No installed-apps scope: r:installedapps isn't a valid API Access app scope (adding it to the
+    // 9 below gives server_error), and the callback's own GET /installedapps/{id} works without it.
     "ST_SCOPES": "r:devices:* x:devices:* r:hubs:* r:locations:* w:locations:* x:locations:* r:rules:* w:rules:* sse",
     // SmartThings appId (not a secret); lifecycle CONFIRMATION is accepted only for this app.
     "ST_APP_ID": "dd2a50f8-3307-445b-afc5-c9150094bcc9",

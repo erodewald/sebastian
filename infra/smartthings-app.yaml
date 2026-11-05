@@ -4,6 +4,8 @@
 # server_error and uninstalls with TargetUnconfirmed. After create/update run
 #   smartthings smartapps:confirm <appId>
 # and the Worker answers the CONFIRMATION at /st/lifecycle (ADR-001, amended).
+# No installed-apps scope: it isn't a valid API Access app scope (the Developer Center offers none),
+# and an app can read its own installed app without one.
 # ST_SCOPES (apps/worker/wrangler.jsonc) must be a subset of oauth.scope. The scenes scopes are
 # registered here but not requested: authorize fails with server_error when they are (2026-11-05).
 # appName must be globally unique and stays reserved after the app is deleted; if create fails with
@@ -32,7 +34,6 @@ oauth:
     - x:scenes:*
     - r:rules:*
     - w:rules:*
-    - r:installedapps
     - sse
   redirectUris:
     - https://sebastian.baltar.media/oauth/callback
