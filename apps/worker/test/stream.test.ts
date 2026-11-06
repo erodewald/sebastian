@@ -1,4 +1,9 @@
-import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test';
+import {
+  createExecutionContext,
+  env,
+  runDurableObjectAlarm,
+  waitOnExecutionContext,
+} from 'cloudflare:test';
 import type { StreamMessage } from '@sebastian/protocol';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -168,7 +173,48 @@ describe('/api/stream', () => {
     expect(ev && ev.type === 'event' && ev.streamAt >= t).toBe(true);
 
     ws.close(1000, 'bye');
+    // The stream outlives the last tab by a grace period (a reload reuses it); the alarm ends it.
+    await new Promise((r) => setTimeout(r, 100));
+    expect(deleted).toBe(false);
+    await runDurableObjectAlarm(env.STREAM.get(env.STREAM.idFromName(IAID)));
     await until(() => deleted);
+  });
+
+  it('backs off for 15 minutes on a rejected create and reports why', async () => {
+    const iaid = 'stream-err-install';
+    const stub = stubFor(iaid);
+    await stub.completeAuth(iaid, tokens(1));
+    await stub.setLocationId('loc-e');
+    let creates = 0;
+    await wire(stub, async (url, init) => {
+      if (init.method === 'POST' && url.pathname === '/v1/sse/subscriptions') {
+        creates++;
+        return json({ error: { code: 'ConstraintViolationError', message: 'bad filter' } }, 400);
+      }
+      return json({}, 404);
+    });
+    const ctx = createExecutionContext();
+    const res = await app.fetch(
+      new Request('https://sebastian.baltar.media/api/stream', {
+        headers: { upgrade: 'websocket', 'cf-access-jwt-assertion': token, 'x-seb-install': iaid },
+      }),
+      env,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    const ws = res.webSocket!;
+    const got: StreamMessage[] = [];
+    ws.accept();
+    ws.addEventListener('message', (e) => got.push(JSON.parse(String(e.data)) as StreamMessage));
+    await until(() => got.some((m) => m.type === 'status' && m.state === 'error'));
+    const err = got.find((m) => m.type === 'status' && m.state === 'error');
+    if (err?.type !== 'status') throw new Error('no error status');
+    expect(err.detail).toContain('HTTP 400');
+    expect(err.errors?.[0]?.detail).toContain('bad filter');
+    expect((err.retryAt ?? 0) - Date.now()).toBeGreaterThan(14 * 60_000);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(creates).toBe(1);
+    ws.close(1000, 'bye');
   });
 });
 

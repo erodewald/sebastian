@@ -17,6 +17,13 @@ import { st } from './st-client.js';
  */
 
 const WATCHDOG_MS = 30_000;
+/** Keep the stream this long after the last tab closes, so a reload reuses it. */
+const GRACE_MS = 60_000;
+/** Never create subscriptions closer together than this, whatever happened. */
+const MIN_CREATE_GAP_MS = 15_000;
+/** A stream that ends sooner than this without a goodbye counts as a failure. */
+const MIN_HEALTHY_MS = 30_000;
+const MAX_ERRORS = 5;
 /** No frame (event or welcome keepalive) for this long = stalled; reconnect. */
 export const STALL_MS = 150_000;
 const RECENT = 50;
@@ -74,6 +81,10 @@ export class StreamDO extends DurableObject<Env> {
   private subscriptionId?: string;
   private lastFrameAt = 0;
   private status: Status = { type: 'status', state: 'idle', deviceIds: [], at: Date.now() };
+  private errors: { at: number; detail: string }[] = [];
+  private lastCreateAt = 0;
+  private retryAt?: number;
+  private goodbye = false;
   private recent: StreamMessage[] = [];
   /** Overridable in tests. */
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -100,6 +111,8 @@ export class StreamDO extends DurableObject<Env> {
       deviceIds: this.cfg?.deviceIds ?? [],
       ...(this.subscriptionId ? { subscriptionId: this.subscriptionId } : {}),
       ...(detail ? { detail } : {}),
+      ...(this.errors.length ? { errors: this.errors } : {}),
+      ...(this.retryAt && state === 'error' ? { retryAt: this.retryAt } : {}),
       at: Date.now(),
     };
     this.broadcast(this.status);
@@ -145,7 +158,9 @@ export class StreamDO extends DurableObject<Env> {
     } catch {
       // already closed
     }
-    if (this.sockets().filter((s) => s !== ws).length === 0) await this.stop();
+    // Last tab gone: linger briefly (the alarm stops it) so a reload doesn't cost a new subscription.
+    if (this.sockets().filter((s) => s !== ws).length === 0)
+      await this.ctx.storage.setAlarm(Date.now() + GRACE_MS);
   }
 
   override async webSocketError(ws: WebSocket) {
@@ -172,16 +187,41 @@ export class StreamDO extends DurableObject<Env> {
     await this.ctx.storage.deleteAlarm();
   }
 
+  private recordError(detail: string) {
+    this.errors = [{ at: Date.now(), detail }, ...this.errors].slice(0, MAX_ERRORS);
+    console.error(JSON.stringify({ stream: 'error', detail }));
+    void this.ctx.storage.put('errors', this.errors);
+  }
+
   private async run() {
     if (this.running || !this.cfg) return;
     this.running = true;
     let backoff = 0;
+    this.errors = (await this.ctx.storage.get<typeof this.errors>('errors')) ?? this.errors;
     try {
+      // A subscription left over from an evicted instance (deploy, restart): delete it first,
+      // since SmartThings allows only two active per integration.
+      const stale = await this.ctx.storage.get<string>('subscriptionId');
+      if (stale && this.cfg) {
+        await st(installStub(this.env, this.cfg.installedAppId), {
+          method: 'DELETE',
+          path: `/v1/sse/subscriptions/${stale}`,
+          category: 'verify',
+        }).catch(() => {});
+        await this.ctx.storage.delete('subscriptionId');
+      }
       while (!this.stopped && this.sockets().length > 0 && this.cfg) {
         const cfg = this.cfg;
         const stub = installStub(this.env, cfg.installedAppId);
+        const gap = this.lastCreateAt + MIN_CREATE_GAP_MS - Date.now();
+        if (gap > 0) await this.sleep(gap);
+        if (this.stopped || this.sockets().length === 0) break;
+        let openedAt = 0;
+        this.goodbye = false;
         try {
+          this.retryAt = undefined;
           this.setStatus(backoff ? 'reconnecting' : 'connecting');
+          this.lastCreateAt = Date.now();
           const created = await st<{ subscriptionId?: string; registrationUrl?: string }>(stub, {
             method: 'POST',
             path: '/v1/sse/subscriptions',
@@ -194,21 +234,31 @@ export class StreamDO extends DurableObject<Env> {
             );
           }
           this.subscriptionId = created.body.subscriptionId;
+          await this.ctx.storage.put('subscriptionId', this.subscriptionId);
           const reg = new URL(created.body.registrationUrl);
           const body = await stub.sseOpen(reg.pathname, Object.fromEntries(reg.searchParams));
-          this.lastFrameAt = Date.now();
+          openedAt = this.lastFrameAt = Date.now();
           this.setStatus('streaming');
-          backoff = 0;
           await this.consume(body);
+          if (!this.goodbye && !this.stopped && Date.now() - openedAt < MIN_HEALTHY_MS) {
+            throw new Error(`stream closed after ${Date.now() - openedAt} ms without a goodbye`);
+          }
+          backoff = 0;
         } catch (e) {
           const code = sebErrorCode(e);
           const detail = e instanceof Error ? e.message : String(e);
-          this.setStatus('error', detail);
-          // Breakers (402 halt, storm, daily allowance) won't clear soon: back off hard.
+          this.recordError(detail);
+          // Breakers (402 halt, storm, daily allowance) and client errors won't clear on their own
+          // soon: back off hard. Anything else: 30 s, doubling to 10 min.
+          const clientError = /HTTP 4(?!29)\d\d/.test(detail);
           backoff =
             code === SEB_ERR.HALTED || code === SEB_ERR.BREAKER || code === SEB_ERR.NEEDS_REAUTH
               ? 5 * 60_000
-              : Math.min(60_000, Math.max(2_000, backoff * 2));
+              : clientError
+                ? 15 * 60_000
+                : Math.min(10 * 60_000, Math.max(30_000, backoff * 2));
+          this.retryAt = Date.now() + backoff;
+          this.setStatus('error', detail);
         } finally {
           this.reader = undefined;
           const id = this.subscriptionId;
@@ -219,10 +269,11 @@ export class StreamDO extends DurableObject<Env> {
               path: `/v1/sse/subscriptions/${id}`,
               category: 'verify',
             }).catch(() => {});
+            await this.ctx.storage.delete('subscriptionId');
           }
         }
         if (backoff && !this.stopped) await this.sleep(backoff);
-        else if (!this.stopped) backoff = 1; // a clean goodbye: reconnect at once, but show "reconnecting"
+        else if (!this.stopped) backoff = 1; // a clean goodbye: reconnect (after the gap), shown as "reconnecting"
       }
     } finally {
       this.running = false;
@@ -246,6 +297,7 @@ export class StreamDO extends DurableObject<Env> {
         this.lastFrameAt = Date.now();
         if (f.event === 'CONTROL_EVENT') {
           if (f.data.trim() === 'goodbye') {
+            this.goodbye = true;
             await reader.cancel('goodbye').catch(() => {});
             return;
           }
