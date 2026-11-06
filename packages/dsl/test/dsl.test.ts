@@ -18,13 +18,30 @@ describe('device handles', () => {
     expect(nookLight.switch.on()).toMatchObject({ command: 'on', args: [] });
   });
 
-  it('rejects wrong values at compile time', () => {
+  it('rejects wrong values in the types and again at runtime (seb plan only strips types)', () => {
     // @ts-expect-error 'ajar' is not a contact value
-    pantryDoor.contactSensor.contact.is('ajar');
+    expect(() => pantryDoor.contactSensor.contact.is('ajar')).toThrow(
+      /one of 'open', 'closed'; got "ajar"/,
+    );
     // @ts-expect-error setLevel needs a number
     nookLight.switchLevel.setLevel('high');
     // @ts-expect-error no such mode
     expect(() => Home.mode.is('Evening')).toThrow(/no mode/);
+    // @ts-expect-error contact is an enum, not a number
+    expect(() => pantryDoor.contactSensor.contact.isAbove(3)).toThrow(
+      /can't be compared as a number/,
+    );
+  });
+
+  it('names what exists when a capability or attribute is misspelled', () => {
+    // @ts-expect-error no such capability
+    expect(() => pantryDoor.contactSenser).toThrow(
+      /Pantry door has no "contactSenser"; it has contactSensor/,
+    );
+    // @ts-expect-error no such attribute
+    expect(() => pantryDoor.contactSensor.state).toThrow(
+      /contactSensor has no "state"; it has contact/,
+    );
   });
 });
 

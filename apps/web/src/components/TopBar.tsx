@@ -1,10 +1,20 @@
-import { Check, Copy, KeyRound, Router, X } from 'lucide-react';
+import { Check, Copy, KeyRound, MapPin, Router, X } from 'lucide-react';
 import { useState } from 'react';
 import { useLive } from '../live.ts';
-import type { Snapshot } from '../source.ts';
+import { pickLocation, type Snapshot } from '../source.ts';
 import { ago, type DeviceIndex, ms, short, until } from '../util.ts';
 
-export function TopBar({ snap, idx }: { snap: Snapshot; idx: DeviceIndex }) {
+export function TopBar({
+  snap,
+  idx,
+  onSettings,
+  editing,
+}: {
+  snap: Snapshot;
+  idx: DeviceIndex;
+  onSettings: () => void;
+  editing: boolean;
+}) {
   const socket = useLive((s) => s.socket);
   const status = useLive((s) => s.status);
   const ka = useLive((s) => s.lastKeepalive);
@@ -31,8 +41,34 @@ export function TopBar({ snap, idx }: { snap: Snapshot; idx: DeviceIndex }) {
         {snap.demo && <span className="tag tag-demo">demo</span>}
       </div>
 
+      <nav className="modes" aria-label="View">
+        <a href="#live" className={editing ? '' : 'is-on'}>
+          Live
+        </a>
+        <a href="#edit" className={editing ? 'is-on' : ''}>
+          Code
+        </a>
+      </nav>
+
+      <label className="loc-switch" title={`installed app ${snap.install.installedAppId}`}>
+        <MapPin size={14} />
+        <select
+          value={snap.install.installedAppId}
+          onChange={(e) => pickLocation(e.target.value)}
+          aria-label="Location"
+        >
+          {snap.me.locations.map((l) => (
+            <option key={l.installedAppId} value={l.installedAppId}>
+              {l.locationName ?? short(l.locationId)}
+              {l.deletedAt ? ' (disconnected)' : ''}
+            </option>
+          ))}
+        </select>
+        <span className={`role role-${snap.install.role}`}>{snap.install.role}</span>
+      </label>
+
       <div
-        className="tb-item"
+        className="tb-item tb-wide"
         title={`location ${st.locationId ?? ''}${snap.devices.location.hubFw ? `\nhub firmware ${snap.devices.location.hubFw}` : ''}`}
       >
         <Router size={14} />
@@ -72,6 +108,15 @@ export function TopBar({ snap, idx }: { snap: Snapshot; idx: DeviceIndex }) {
           {b.breakers.length > 0 && <span className="tag tag-bad">breaker</span>}
         </div>
       )}
+
+      <button
+        type="button"
+        className="account"
+        onClick={onSettings}
+        title={`${snap.me.email}: locations, people, CLI tokens`}
+      >
+        <span className="avatar">{snap.me.email.slice(0, 1).toUpperCase()}</span>
+      </button>
 
       <div className="pill-wrap">
         <button

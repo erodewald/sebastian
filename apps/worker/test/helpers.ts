@@ -64,3 +64,28 @@ export async function errOf(p: Promise<unknown>): Promise<string> {
   }
   throw new Error('expected rejection, got resolution');
 }
+
+/**
+ * Make `email` an admin who can reach `installedAppId` (an installs row must exist for the
+ * tenancy checks), and return a personal API token for service-token (CLI) requests.
+ * Idempotent, so it can run before every request whatever the storage isolation.
+ */
+export async function seedAccess(installedAppId: string, email = 'e@x', locationId = 'loc') {
+  const token = `seb_test_${email.replace(/[^a-z0-9]/gi, '_')}`;
+  const { sha256Hex } = await import('@sebastian/protocol');
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO users (email, is_admin, created_at, last_seen_at) VALUES (?, 1, 0, 0)
+       ON CONFLICT (email) DO NOTHING`,
+    ).bind(email),
+    env.DB.prepare(
+      `INSERT INTO installs (installed_app_id, location_id, owner_email, created_at, updated_at)
+       VALUES (?, ?, ?, 0, 0) ON CONFLICT (installed_app_id) DO NOTHING`,
+    ).bind(installedAppId, locationId, email),
+    env.DB.prepare(
+      `INSERT INTO api_tokens (id, email, name, token_hash, created_at) VALUES (?, ?, 'test', ?, 0)
+       ON CONFLICT (id) DO NOTHING`,
+    ).bind(`tok-${email}`, email, await sha256Hex(token)),
+  ]);
+  return token;
+}

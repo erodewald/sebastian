@@ -102,23 +102,59 @@ export type DeviceHandle<D extends DeviceSpec> = ComponentHandle<D['components']
 
 const lit = (value: Scalar): Operand => ({ kind: 'literal', value });
 
-function attrHandle(operand: Operand): AttrHandle<Scalar> {
+/**
+ * The types catch these in an editor with TypeScript, but `seb plan` and the web editor only
+ * strip types, so values are checked again at runtime against the capability definition.
+ */
+function attrHandle(
+  operand: Operand,
+  spec: AttrSpec | undefined,
+  where: string,
+): AttrHandle<Scalar> {
   const cmp = (op: Extract<Condition, { kind: 'compare' }>['op'], v: Scalar): Condition => ({
     kind: 'compare',
     op,
     left: operand,
     right: lit(v),
   });
+  const value = (v: Scalar): Scalar => {
+    if (spec?.type === 'enum' && !spec.values.includes(String(v)))
+      throw new Error(
+        `${where} is one of ${spec.values.map((x) => `'${x}'`).join(', ')}; got ${JSON.stringify(v)}`,
+      );
+    return v;
+  };
+  const num = (n: number): number => {
+    if (spec && spec.type !== 'number' && spec.type !== 'json')
+      throw new Error(`${where} is ${spec.type}, so it can't be compared as a number`);
+    if (typeof n !== 'number' || Number.isNaN(n))
+      throw new Error(`${where}: expected a number, got ${JSON.stringify(n)}`);
+    return n;
+  };
   return {
     operand,
-    is: (v) => cmp('equals', v),
-    isNot: (v) => ({ kind: 'not', cond: cmp('equals', v) }),
-    changesTo: (v) => ({ kind: 'changes', cond: cmp('equals', v) }),
-    isAbove: (n) => cmp('greaterThan', n),
-    isBelow: (n) => cmp('lessThan', n),
-    risesAbove: (n) => ({ kind: 'changes', cond: cmp('greaterThan', n) }),
-    fallsBelow: (n) => ({ kind: 'changes', cond: cmp('lessThan', n) }),
+    is: (v) => cmp('equals', value(v)),
+    isNot: (v) => ({ kind: 'not', cond: cmp('equals', value(v)) }),
+    changesTo: (v) => ({ kind: 'changes', cond: cmp('equals', value(v)) }),
+    isAbove: (n) => cmp('greaterThan', num(n)),
+    isBelow: (n) => cmp('lessThan', num(n)),
+    risesAbove: (n) => ({ kind: 'changes', cond: cmp('greaterThan', num(n)) }),
+    fallsBelow: (n) => ({ kind: 'changes', cond: cmp('lessThan', num(n)) }),
   };
+}
+
+/** Unknown names fail with what exists, instead of "cannot read properties of undefined". */
+function strict<T extends object>(target: T, what: string): T {
+  return new Proxy(target, {
+    get(t, key, recv) {
+      if (typeof key === 'symbol' || key in t || key === 'then' || key === 'toJSON')
+        return Reflect.get(t, key, recv);
+      const known = Object.keys(t).filter((k) => k !== 'ref' && k !== 'component');
+      throw new Error(
+        `${what} has no "${key}"${known.length ? `; it has ${known.join(', ')}` : ''}`,
+      );
+    },
+  });
 }
 
 function componentHandle(ref: DeviceRef, component: string, spec: ComponentSpec) {
@@ -133,6 +169,13 @@ function componentHandle(ref: DeviceRef, component: string, spec: ComponentSpec)
             `${ref.label}: ${capability}.${command} needs ${required} argument(s), got ${args.length}`,
           );
         }
+        args.forEach((a, i) => {
+          const s = argSpecs[i];
+          if (s?.type === 'enum' && a !== undefined && !s.values?.includes(String(a)))
+            throw new Error(
+              `${ref.label}: ${capability}.${command} ${s.name} is one of ${(s.values ?? []).map((x) => `'${x}'`).join(', ')}; got ${JSON.stringify(a)}`,
+            );
+        });
         return {
           kind: 'command',
           devices: [ref],
@@ -144,10 +187,14 @@ function componentHandle(ref: DeviceRef, component: string, spec: ComponentSpec)
       };
     }
     // Attributes win a name clash with a command (rare); the command stays reachable through the AST.
-    for (const attribute of Object.keys(cap.attributes)) {
-      h[attribute] = attrHandle({ kind: 'device', device: ref, component, capability, attribute });
+    for (const [attribute, attrSpec] of Object.entries(cap.attributes)) {
+      h[attribute] = attrHandle(
+        { kind: 'device', device: ref, component, capability, attribute },
+        attrSpec,
+        `${ref.label}: ${capability}.${attribute}`,
+      );
     }
-    out[capability] = h;
+    out[capability] = strict(h, `${ref.label}: ${capability}`);
   }
   return out;
 }
@@ -165,10 +212,10 @@ export function defineDevice<const D extends DeviceSpec>(spec: D): DeviceHandle<
     component: (name: string) => {
       const comp = spec.components[name];
       if (!comp) throw new Error(`${spec.label} has no component "${name}"`);
-      return componentHandle(ref, name, comp);
+      return strict(componentHandle(ref, name, comp), `${spec.label} (${name})`);
     },
   };
-  return handle as unknown as DeviceHandle<D>;
+  return strict(handle, spec.label) as unknown as DeviceHandle<D>;
 }
 
 export type LocationSpec = {

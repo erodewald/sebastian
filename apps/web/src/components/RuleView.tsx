@@ -160,8 +160,12 @@ export function RuleView({
             type="button"
             className="btn btn-primary"
             onClick={execute}
-            disabled={busy}
-            title="POST /rules/{id}/execute"
+            disabled={busy || snap.install.role === 'viewer'}
+            title={
+              snap.install.role === 'viewer'
+                ? 'Viewers can’t run rules'
+                : 'POST /rules/{id}/execute'
+            }
           >
             <Play size={14} /> Run now
           </button>

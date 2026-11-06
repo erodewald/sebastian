@@ -9,7 +9,7 @@ import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
 import { filtersFor, parseSse } from '../src/stream-do';
-import { json, stubFor, tokens, wire } from './helpers';
+import { json, seedAccess, stubFor, tokens, wire } from './helpers';
 
 describe('parseSse', () => {
   it('splits frames and keeps the incomplete tail', () => {
@@ -37,6 +37,7 @@ describe('filtersFor', () => {
 });
 
 const IAID = 'ia-stream';
+const seed = () => Promise.all([seedAccess(IAID), seedAccess('stream-err-install')]);
 let app: ReturnType<typeof createApp>;
 let token: string;
 
@@ -63,6 +64,7 @@ const until = async (cond: () => boolean, ms = 3000) => {
 
 describe('/api/stream', () => {
   it('refuses a plain GET', async () => {
+    await seed();
     const ctx = createExecutionContext();
     const res = await app.fetch(
       new Request('https://sebastian.baltar.media/api/stream', {
@@ -132,6 +134,7 @@ describe('/api/stream', () => {
       return json({}, 404);
     });
 
+    await seed();
     const ctx = createExecutionContext();
     const res = await app.fetch(
       new Request('https://sebastian.baltar.media/api/stream', {
@@ -198,6 +201,7 @@ describe('/api/stream', () => {
       return json({}, 404);
     });
     const open = async () => {
+      await seed();
       const ctx = createExecutionContext();
       const res = await app.fetch(
         new Request('https://sebastian.baltar.media/api/stream', {
@@ -244,6 +248,7 @@ describe('/api/stream', () => {
 describe('web UI routes', () => {
   it('keeps the UI behind Access and unknown /api paths as JSON 404s', async () => {
     const call = async (path: string, auth: boolean) => {
+      await seed();
       const ctx = createExecutionContext();
       const res = await app.fetch(
         new Request(`https://sebastian.baltar.media${path}`, {

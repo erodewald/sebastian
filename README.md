@@ -85,7 +85,7 @@ Automations live in a separate, **private** home repo; device IDs never enter th
 
 ```bash
 seb init ../home && cd ../home && git init          # once
-export SEB_HOME=. CF_ACCESS_CLIENT_ID=… CF_ACCESS_CLIENT_SECRET=…
+export SEB_HOME=. CF_ACCESS_CLIENT_ID=… CF_ACCESS_CLIENT_SECRET=… SEB_TOKEN=…
 seb pull                                             # generated/home.generated.ts: typed devices + modes
 ```
 
@@ -107,6 +107,7 @@ seb apply    # deploy via ApplyWorkflow; reports where SmartThings actually runs
 seb run pantry-light.ts   # execute it now
 seb rules    # what's managed and where it runs
 seb destroy --all
+seb export   # write the location's automations (incl. ones edited in the web UI) to automations/
 ```
 
 - **DSL:**
@@ -120,10 +121,17 @@ seb destroy --all
   - A rule mixing devices from two hubs is **Cloud**.
   - `apply` flags any rule whose actual location contradicts the prediction.
 
+## People and locations (ADR-005)
+
+- The first person to sign in is the admin. Admins connect SmartThings locations at `/oauth/start` (each one is a separate install of the same app).
+- Switch locations with the picker in the top bar. Share one under the avatar → **People**: viewer (read and live view), editor (plan, apply, run), owner (manage people). New people must also be allowed by the Access policy.
+- The CLI needs a personal token: avatar → **CLI tokens**, then `export SEB_TOKEN=…`. `seb locations` lists what you can reach; `SEB_INSTALL=<id>` picks one.
+
 ## Web UI
 
 Open `https://sebastian.baltar.media/` (Access login). `?demo` shows a made-up home with simulated events; `?theme=light|dark` overrides the system theme.
 
+- **Code** (top bar): write automations in the browser, with completions for your devices (imported automatically), the compiled Rules JSON and locality prediction as you type, then **Plan** and **Apply**. Sources are kept per location and autosaved; any apply, web or CLI, makes them exactly what was applied. `seb export` writes them to your home repo. Compiling happens in a sandboxed iframe (ADR-006).
 - **Rules** (left): every managed rule, where SmartThings runs it, and the devices it uses with their latest values.
 - **Flow**: WHEN → ONLY IF → DO, read back from the stored Rules JSON. A run lights it up: the trigger's device event opens the run, each command step turns green when the device reports the new value, sleeps count down.
 - **Code**: the TypeScript next to the compiled Rules JSON. Hovering either highlights the matching flow step, and the other way round.
