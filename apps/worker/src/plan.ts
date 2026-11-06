@@ -7,6 +7,9 @@ export const MAX_MANAGED_RULES = 50;
 export interface ManagedRow {
   rule_id: string;
   source_path: string;
+  source_hash: string;
+  source_text: string | null;
+  reasons_json: string | null;
   compiled_hash: string;
   predicted_loc: string | null;
   actual_loc: string | null;
@@ -16,7 +19,8 @@ export interface ManagedRow {
 
 export async function managedRows(env: Env, installedAppId: string): Promise<ManagedRow[]> {
   const { results } = await env.DB.prepare(
-    `SELECT rule_id, source_path, compiled_hash, predicted_loc, actual_loc, applied_at, compiled_json
+    `SELECT rule_id, source_path, source_hash, source_text, reasons_json, compiled_hash, predicted_loc,
+            actual_loc, applied_at, compiled_json
      FROM rules_managed WHERE installed_app_id = ? ORDER BY source_path`,
   )
     .bind(installedAppId)

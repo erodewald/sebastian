@@ -15,8 +15,9 @@ import { SEB_ERR, sebErrorCode } from './install-do.js';
 import { LIFECYCLE_PATH, registerLifecycle } from './lifecycle.js';
 import { model } from './model.js';
 import { diff, managedRows, PlanError, verifyItems } from './plan.js';
-import { executeRule, FatalRuleError } from './rules.js';
+import { executeRule, FatalRuleError, refreshRuleMetadata } from './rules.js';
 import { st } from './st-client.js';
+import { devicesFromD1, managedDeviceIds, ruleDeviceIds } from './ui-api.js';
 import { whoami } from './whoami.js';
 
 type AppEnv = { Bindings: Env; Variables: AccessVars };
@@ -196,6 +197,20 @@ export function createApp(opts: { accessKeys?: JWTVerifyGetKey } = {}) {
         return [{ op: 'delete', ruleId: o.ruleId, sourcePath: o.sourcePath }];
       return [];
     });
+    // Unchanged rules need no SmartThings call, but keep their source and reasons current.
+    const rows = new Map((await managedRows(c.env, installedAppId)).map((r) => [r.rule_id, r]));
+    for (const o of ops) {
+      const item = items.get(o.sourcePath);
+      const row = o.ruleId ? rows.get(o.ruleId) : undefined;
+      if (
+        o.op === 'noop' &&
+        item &&
+        row &&
+        (row.source_hash !== item.sourceHash || row.source_text === null)
+      ) {
+        await refreshRuleMetadata(c.env, installedAppId, row.rule_id, item);
+      }
+    }
     if (work.length === 0) return c.json({ installedAppId, locationId, ops, instanceId: null });
     const instance = await c.env.APPLY.create({
       params: { installedAppId, locationId, ops: work },
@@ -217,16 +232,48 @@ export function createApp(opts: { accessKeys?: JWTVerifyGetKey } = {}) {
   });
 
   api.get('/rules', async (c) => {
+    const detail = c.req.query('detail') === '1';
     const rows = await managedRows(c.env, c.get('installedAppId'));
-    const out: ManagedRule[] = rows.map((r) => ({
-      ruleId: r.rule_id,
-      sourcePath: r.source_path,
-      name: String((JSON.parse(r.compiled_json) as { name?: string }).name ?? ''),
-      predicted: r.predicted_loc,
-      actual: r.actual_loc,
-      appliedAt: r.applied_at,
-    }));
+    const out: ManagedRule[] = rows.map((r) => {
+      const rule = JSON.parse(r.compiled_json) as { name?: string };
+      return {
+        ruleId: r.rule_id,
+        sourcePath: r.source_path,
+        name: String(rule.name ?? ''),
+        predicted: r.predicted_loc,
+        actual: r.actual_loc,
+        appliedAt: r.applied_at,
+        ...(detail
+          ? {
+              source: r.source_text,
+              rule,
+              reasons: r.reasons_json ? (JSON.parse(r.reasons_json) as string[]) : [],
+              deviceIds: ruleDeviceIds(rule),
+            }
+          : {}),
+      };
+    });
     return c.json(out);
+  });
+
+  api.get('/devices', async (c) => c.json(await devicesFromD1(c.env, c.get('installedAppId'))));
+
+  // Live device events for the web UI: a WebSocket to this install's StreamDO, which holds an
+  // SSE subscription to the devices the managed rules use only while a tab is connected.
+  api.get('/stream', async (c) => {
+    if (c.req.header('upgrade')?.toLowerCase() !== 'websocket') {
+      return c.json({ error: 'upgrade_required', detail: 'connect with a WebSocket' }, 426);
+    }
+    const installedAppId = c.get('installedAppId');
+    const status = await stubFor(c).status();
+    if (!status.locationId)
+      return c.json({ error: SEB_ERR.NOT_INSTALLED, detail: 'no location' }, 409);
+    const headers = new Headers(c.req.raw.headers);
+    headers.set('x-seb-install', installedAppId);
+    headers.set('x-seb-location', status.locationId);
+    headers.set('x-seb-devices', JSON.stringify(await managedDeviceIds(c.env, installedAppId)));
+    const stream = c.env.STREAM.get(c.env.STREAM.idFromName(installedAppId));
+    return stream.fetch(new Request(c.req.raw.url, { headers }));
   });
 
   api.post('/rules/:ruleId/execute', async (c) => {
@@ -239,6 +286,10 @@ export function createApp(opts: { accessKeys?: JWTVerifyGetKey } = {}) {
   });
 
   app.route('/api', api);
+
+  // Everything else is the web UI. Unknown /api paths stay JSON 404s, not the SPA shell.
+  app.all('/api/*', (c) => c.json({ error: 'not_found' }, 404));
+  app.get('*', (c) => c.env.ASSETS.fetch(c.req.raw));
   return app;
 }
 

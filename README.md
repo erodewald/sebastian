@@ -4,7 +4,7 @@
 
 Hub-first automations-as-code for SmartThings. You write automations as typed TypeScript, Sebastian compiles them to the Rules API, lints them for **local execution on the hub**, deploys them with `plan`/`apply`, and verifies behaviour over SSE. See [`docs/PLAN.md`](docs/PLAN.md) and [`docs/platform-facts.md`](docs/platform-facts.md).
 
-**Status: M1 (vertical slice).** M0's Worker, token vault, metered client, OAuth and Access, plus: the DSL, the Rules compiler, a hub-aware locality linter, `seb pull` codegen, and `plan` / `apply` / `run` / `destroy` through an `ApplyWorkflow` that reads back where SmartThings actually runs each rule. StreamDO, the probe suite and verify mode are M2.
+**Status: M1 (vertical slice).** M0's Worker, token vault, metered client, OAuth and Access, plus: the DSL, the Rules compiler, a hub-aware locality linter, `seb pull` codegen, and `plan` / `apply` / `run` / `destroy` through an `ApplyWorkflow` that reads back where SmartThings actually runs each rule. Plus the web UI: a live console at the Worker's hostname (behind Access) that shows each rule's TypeScript, its compiled Rules JSON, and its runs lighting up from the SSE stream, hop by hop. The probe suite and verify mode are M2.
 
 ## Layout
 
@@ -13,7 +13,8 @@ packages/st-types   SmartThings API types, rate-limit/402/429 helpers, ledger ca
 packages/protocol   zod schemas for the Worker ⇄ CLI API, canonical rule hash
 packages/dsl        automation builder → plain AST; typed device/location handles
 packages/compiler   AST → Rules API JSON; locality linter
-apps/worker         Hono Worker, InstallDO (token vault + stFetch + ledger), ApplyWorkflow, cron, D1
+apps/worker         Hono Worker, InstallDO (token vault + stFetch + ledger), ApplyWorkflow, StreamDO, cron, D1
+apps/web            React + Vite console, served by the Worker as static assets
 apps/cli            `seb` (talks only to the Worker, via Cloudflare Access)
 docs/               PLAN, platform facts, ADRs
 ```
@@ -22,7 +23,8 @@ docs/               PLAN, platform facts, ADRs
 
 ```bash
 pnpm install
-pnpm check       # biome + st-host guard, typecheck, unit + Workers-runtime tests
+pnpm check       # biome + st-host guard, typecheck, web build, unit + Workers-runtime tests
+pnpm --filter @sebastian/web dev   # UI on demo data: http://localhost:5173/?demo
 ```
 
 ## First deploy (PLAN §13)
@@ -117,6 +119,18 @@ seb destroy --all
   - Mode conditions, time windows, sunrise/sunset and mode changes start as **Unknown** until the M2 probe suite measures them.
   - A rule mixing devices from two hubs is **Cloud**.
   - `apply` flags any rule whose actual location contradicts the prediction.
+
+## Web UI
+
+Open `https://sebastian.baltar.media/` (Access login). `?demo` shows a made-up home with simulated events; `?theme=light|dark` overrides the system theme.
+
+- **Rules** (left): every managed rule, where SmartThings runs it, and the devices it uses with their latest values.
+- **Flow**: WHEN → ONLY IF → DO, read back from the stored Rules JSON. A run lights it up: the trigger's device event opens the run, each command step turns green when the device reports the new value, sleeps count down.
+- **Code**: the TypeScript next to the compiled Rules JSON. Hovering either highlights the matching flow step, and the other way round.
+- **Trace**: one run as a waterfall: hub execution, SmartThings → Cloudflare, Cloudflare → tab, with sleeps drawn as axis breaks.
+- **Hops / Events** (right): the device → hub → SmartThings → StreamDO → tab path with p50/p95, and the live event feed.
+
+The feed is a WebSocket to `/api/stream`. StreamDO holds one SSE subscription, filtered to the devices in managed rules, only while a tab is open. SmartThings doesn't report rule executions, so a "run" is inferred from device events: a matching trigger event opens one, confirming events close its steps, and a step with no event within 20 s is marked as missed. Run source shows up after the next `seb apply`.
 
 ## Invariants
 

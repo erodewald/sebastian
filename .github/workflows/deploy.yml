@@ -29,6 +29,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Build web UI
+        run: pnpm build
       - name: Apply D1 migrations
         working-directory: apps/worker
         run: pnpm exec wrangler d1 migrations apply sebastian --remote

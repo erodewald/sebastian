@@ -4,6 +4,7 @@ import type { Env } from './env.js';
 
 export { ApplyWorkflow } from './apply-workflow.js';
 export { InstallDO } from './install-do.js';
+export { StreamDO } from './stream-do.js';
 
 const app = createApp();
 

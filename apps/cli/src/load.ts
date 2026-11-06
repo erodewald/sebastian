@@ -72,9 +72,8 @@ export async function loadHome(home: string): Promise<LoadResult> {
       const ast = a.toAST();
       const rule = compile(ast, { locationId: location.id, timeZoneId: location.timeZoneId });
       const prediction = predictLocality(ast);
-      const sourceHash = createHash('sha256')
-        .update(await readFile(file))
-        .digest('hex');
+      const sourceText = await readFile(file, 'utf8');
+      const sourceHash = createHash('sha256').update(sourceText).digest('hex');
       compiled.push({
         ast,
         item: {
@@ -85,6 +84,7 @@ export async function loadHome(home: string): Promise<LoadResult> {
           compiledHash: await ruleHash(rule),
           predicted: prediction.locality,
           reasons: prediction.reasons,
+          source: sourceText,
         },
       });
     } catch (e) {
