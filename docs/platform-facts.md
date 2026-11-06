@@ -23,7 +23,10 @@ Sources: blog.smartthings.com (Oct 30 2026 "API Additional Details" post), devel
 
 ## SSE
 
-- POST /v1/sse/subscriptions {name, subscriptionFilters[{type: LOCATIONIDS|DEVICEIDS, value[], eventType[]}]} -> {subscriptionId, registrationUrl}
+- Source: the SSE guide, https://developer.smartthings.com/docs/service-integrations/sse-subscriptions (the public OpenAPI spec, https://swagger.api.smartthings.com/public/st-api.yml, has no SSE endpoints).
+- POST /v1/sse/subscriptions {name, subscriptionFilters[{type: LOCATIONIDS|DEVICEIDS, value[], eventType[]}]} -> {subscriptionId, registrationUrl, version, name, subscriptionFilters}. `value: ["ALL"]` matches every location the token can see (LOCATIONIDS only).
+- **Observed 2026-11-06:** `MODE_EVENT` on a `LOCATIONIDS` filter is rejected: 400 `BadRequestError`, server log `eventType MODE_EVENT not allowed for filterType LOCATIONIDS and version 20250122`. The guide lists MODE_EVENT without restriction and never mentions a version `20250122` (its response example shows `version: 1`). Reported. Sebastian subscribes to DEVICEIDS filters only.
+- Error policy (guide): 4xx other than the ones below = invalid, don't retry unchanged; 403 = subscription gone or no access, create a new one; 409 = PUT before activation; 418 = client flagged, fix before retrying; 429 and 5xx = exponential backoff with ±10–25% jitter. Prefer PUT to change filters over recreating.
 - GET registrationUrl with Accept: text/event-stream within 1 minute or it's deleted.
 - PUT to update filters (only when active), DELETE to stop.
 - Event types: DEVICE_EVENT, DEVICE_LIFECYCLE_EVENT, DEVICE_HEALTH_EVENT, INSTALLED_APP_LIFECYCLE_EVENT, LOCATION_LIFECYCLE_EVENT, MODE_EVENT, SCENE_LIFECYCLE_EVENT.

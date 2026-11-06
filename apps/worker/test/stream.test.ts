@@ -25,11 +25,10 @@ describe('parseSse', () => {
 });
 
 describe('filtersFor', () => {
-  it('chunks device ids 10 per filter and always watches mode', () => {
+  it('chunks device ids 10 per filter, with no LOCATIONIDS/MODE_EVENT filter (rejected by SmartThings)', () => {
     const ids = Array.from({ length: 23 }, (_, i) => `d${i}`);
     const f = filtersFor({ installedAppId: 'ia', locationId: 'loc', deviceIds: ids });
     expect(f.map((x) => [x.type, x.value.length])).toEqual([
-      ['LOCATIONIDS', 1],
       ['DEVICEIDS', 10],
       ['DEVICEIDS', 10],
       ['DEVICEIDS', 3],
@@ -150,7 +149,6 @@ describe('/api/stream', () => {
 
     await until(() => got.some((m) => m.type === 'status' && m.state === 'streaming'));
     expect(created?.subscriptionFilters).toEqual([
-      { type: 'LOCATIONIDS', value: ['loc-s'], eventType: ['MODE_EVENT'] },
       {
         type: 'DEVICEIDS',
         value: ['dev-door', 'dev-light'],
@@ -180,41 +178,66 @@ describe('/api/stream', () => {
     await until(() => deleted);
   });
 
-  it('backs off for 15 minutes on a rejected create and reports why', async () => {
+  it('does not retry a rejected create, and a newly opened tab tries once more', async () => {
     const iaid = 'stream-err-install';
     const stub = stubFor(iaid);
     await stub.completeAuth(iaid, tokens(1));
     await stub.setLocationId('loc-e');
+    await env.DB.prepare(
+      `INSERT INTO rules_managed (rule_id, installed_app_id, source_path, source_hash, compiled_hash, applied_at, compiled_json)
+       VALUES ('r-e', ?, 'automations/e.ts', 'h', 'c', 0, ?)`,
+    )
+      .bind(iaid, JSON.stringify({ actions: [{ command: { devices: ['dev-x'] } }] }))
+      .run();
     let creates = 0;
     await wire(stub, async (url, init) => {
       if (init.method === 'POST' && url.pathname === '/v1/sse/subscriptions') {
         creates++;
-        return json({ error: { code: 'ConstraintViolationError', message: 'bad filter' } }, 400);
+        return json({ error: { code: 'BadRequestError', message: 'bad filter' } }, 400);
       }
       return json({}, 404);
     });
-    const ctx = createExecutionContext();
-    const res = await app.fetch(
-      new Request('https://sebastian.baltar.media/api/stream', {
-        headers: { upgrade: 'websocket', 'cf-access-jwt-assertion': token, 'x-seb-install': iaid },
-      }),
-      env,
-      ctx,
-    );
-    await waitOnExecutionContext(ctx);
-    const ws = res.webSocket!;
-    const got: StreamMessage[] = [];
-    ws.accept();
-    ws.addEventListener('message', (e) => got.push(JSON.parse(String(e.data)) as StreamMessage));
-    await until(() => got.some((m) => m.type === 'status' && m.state === 'error'));
-    const err = got.find((m) => m.type === 'status' && m.state === 'error');
+    const open = async () => {
+      const ctx = createExecutionContext();
+      const res = await app.fetch(
+        new Request('https://sebastian.baltar.media/api/stream', {
+          headers: {
+            upgrade: 'websocket',
+            'cf-access-jwt-assertion': token,
+            'x-seb-install': iaid,
+          },
+        }),
+        env,
+        ctx,
+      );
+      await waitOnExecutionContext(ctx);
+      const ws = res.webSocket!;
+      const got: StreamMessage[] = [];
+      ws.accept();
+      ws.addEventListener('message', (e) => got.push(JSON.parse(String(e.data)) as StreamMessage));
+      return { ws, got };
+    };
+    const first = await open();
+    await until(() => first.got.some((m) => m.type === 'status' && m.state === 'error'));
+    const err = first.got.find((m) => m.type === 'status' && m.state === 'error');
     if (err?.type !== 'status') throw new Error('no error status');
     expect(err.detail).toContain('HTTP 400');
+    expect(err.detail).toContain('Stopped');
+    expect(err.retryAt).toBeUndefined();
     expect(err.errors?.[0]?.detail).toContain('bad filter');
-    expect((err.retryAt ?? 0) - Date.now()).toBeGreaterThan(14 * 60_000);
-    await new Promise((r) => setTimeout(r, 200));
+    // The watchdog doesn't restart a stopped stream.
+    await runDurableObjectAlarm(env.STREAM.get(env.STREAM.idFromName(iaid)));
+    await new Promise((r) => setTimeout(r, 100));
     expect(creates).toBe(1);
-    ws.close(1000, 'bye');
+    // A new tab gets one fresh attempt (after the minimum gap between creates, so just check
+    // that it's waiting rather than stopped).
+    const second = await open();
+    await until(
+      () => second.got.some((m) => m.type === 'status' && m.state === 'connecting'),
+      1000,
+    ).catch(() => {});
+    first.ws.close(1000, 'bye');
+    second.ws.close(1000, 'bye');
   });
 });
 
