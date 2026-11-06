@@ -286,6 +286,10 @@ export function createApp(opts: { accessKeys?: JWTVerifyGetKey } = {}) {
   });
 
   app.route('/api', api);
+
+  // Everything else is the web UI. Unknown /api paths stay JSON 404s, not the SPA shell.
+  app.all('/api/*', (c) => c.json({ error: 'not_found' }, 404));
+  app.get('*', (c) => c.env.ASSETS.fetch(c.req.raw));
   return app;
 }
 

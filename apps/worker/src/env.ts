@@ -7,6 +7,8 @@ export interface Env {
   DB: D1Database;
   APPLY: Workflow<ApplyParams>;
   STREAM: DurableObjectNamespace<StreamDO>;
+  /** The built web UI (apps/web/dist). */
+  ASSETS: Fetcher;
 
   PUBLIC_ORIGIN: string;
   ACCESS_TEAM_DOMAIN: string;

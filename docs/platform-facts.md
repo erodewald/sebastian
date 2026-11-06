@@ -65,8 +65,8 @@ Sources: blog.smartthings.com (Oct 30 2026 "API Additional Details" post), devel
 - `smartapps:confirm` returns 202 even when delivery fails. Check `targetStatus` (`PENDING` → `CONFIRMED`).
 - Authorize `scope` is space-separated. A literal `+` gives `invalid_scope: unable to build scope from a+b`.
 - Scope combinations failing with `server_error`: `r:scenes:*`+`x:scenes:*` (each alone works; unexplained, reported). The 9 working scopes + `r:installedapps` also fails, because `r:installedapps` isn't a valid scope: the documented scope table has none, and the platform developer said to do what the Developer Center does, which offers no installed-apps scopes. It should be rejected with `invalid_scope`, not `server_error`.
-- The CLI `installedapps` list omits `API_ONLY` installs; `installedapps <id>` and `installedapps:delete <id>` work. (Whether re-authorizing without deleting creates a second install despite `singleInstance` is untested.)
-- `POST /rules/execute/{id}` needs `x:rules:*` (403 `execute-behavior-fail-invalid-scopes` without it). `x:rules:*` is not in the documented scope table.
+- The CLI `installedapps` list omits `API_ONLY` installs; `installedapps <id>` and `installedapps:delete <id>` work. Re-authorizing without deleting reuses the same `installedAppId` (`singleInstance` holds; seen 2026-11-06 when adding `x:rules:*`).
+- `POST /rules/execute/{id}` needs `x:rules:*` (403 `execute-behavior-fail-invalid-scopes` without it). `x:rules:*` is not in the documented scope table, but authorizing it together with the other 9 scopes works.
 - Rules created through the Rules API don't appear in the SmartThings mobile app.
 - First real apply (2026-11-06): contact sensor → Zigbee light on the v2 hub, with `sleep`, read back `executionLocation: Local`, as predicted.
 - An app can read its own installed app (`GET /installedapps/{id}`) without `r:installedapps`.

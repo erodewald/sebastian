@@ -171,3 +171,25 @@ describe('/api/stream', () => {
     await until(() => deleted);
   });
 });
+
+describe('web UI routes', () => {
+  it('keeps the UI behind Access and unknown /api paths as JSON 404s', async () => {
+    const call = async (path: string, auth: boolean) => {
+      const ctx = createExecutionContext();
+      const res = await app.fetch(
+        new Request(`https://sebastian.baltar.media${path}`, {
+          headers: auth ? { 'cf-access-jwt-assertion': token, 'x-seb-install': IAID } : {},
+        }),
+        env,
+        ctx,
+      );
+      await waitOnExecutionContext(ctx);
+      return res;
+    };
+    expect((await call('/', false)).status).toBe(401);
+    expect((await call('/assets/index.js', false)).status).toBe(401);
+    const nope = await call('/api/nope', true);
+    expect(nope.status).toBe(404);
+    expect(await nope.json()).toEqual({ error: 'not_found' });
+  });
+});
