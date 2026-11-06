@@ -1622,3 +1622,191 @@ button.stream-pill {
   flex: 1;
   min-width: 0;
 }
+
+/* ── locations, account, settings ── */
+.loc-switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-2);
+}
+.loc-switch svg {
+  color: var(--muted);
+}
+.loc-switch select,
+.settings select,
+.settings input {
+  font: inherit;
+  color: var(--fg);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+.loc-switch select {
+  font-weight: 600;
+  max-width: 220px;
+}
+.role {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--line-2);
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+.role-owner {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.role-editor {
+  color: var(--st);
+  border-color: color-mix(in srgb, var(--st) 40%, transparent);
+}
+.account {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--panel-2);
+  border: 1px solid var(--line-2);
+  font-weight: 650;
+  font-size: 12px;
+  color: var(--fg);
+}
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  justify-content: flex-end;
+}
+.overlay .settings {
+  width: min(560px, 100vw);
+  height: 100%;
+  border-left: 1px solid var(--line-2);
+}
+.settings {
+  background: var(--bg-2);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.onboard .settings {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin: 16px 0;
+}
+.st-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.st-tabs {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+.st-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: none;
+  cursor: pointer;
+  color: var(--fg-2);
+  font-weight: 550;
+}
+.st-tab.is-on {
+  background: var(--panel);
+  border-color: var(--line-2);
+  color: var(--fg);
+}
+.st-body {
+  padding: 14px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.st-body p {
+  margin: 0;
+}
+.st-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.st-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+}
+.st-list li + li {
+  border-top: 1px solid var(--line);
+}
+.st-list li.is-current {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.st-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.st-main > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.st-add {
+  display: flex;
+  gap: 8px;
+}
+.st-add input {
+  flex: 1;
+  min-width: 0;
+}
+.st-err {
+  color: var(--bad);
+}
+.st-fresh {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  border-radius: var(--radius);
+}
+.st-fresh pre {
+  align-self: stretch;
+}
+.onboard {
+  max-width: 620px;
+  margin: 10vh auto;
+  padding: 0 16px;
+}
+a.btn {
+  align-self: flex-start;
+}

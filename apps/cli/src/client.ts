@@ -5,6 +5,9 @@
  * Auth, in order of preference:
  *  - CF_ACCESS_CLIENT_ID + CF_ACCESS_CLIENT_SECRET  (service token: `seb-cli` or `seb-ci`)
  *  - CF_ACCESS_TOKEN                               (e.g. from `cloudflared access token -app=…`)
+ * plus SEB_TOKEN, your personal Sebastian token (web UI → Tokens): the service token only gets
+ * through Access, the personal token says who you are. SEB_INSTALL picks a location
+ * (`seb locations`); without it, your most recently connected one.
  */
 
 export interface ClientConfig {
@@ -24,6 +27,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): ClientConfi
   } else if (env.CF_ACCESS_TOKEN) {
     headers['cf-access-token'] = env.CF_ACCESS_TOKEN;
   }
+  if (env.SEB_TOKEN) headers['x-seb-token'] = env.SEB_TOKEN;
   if (env.SEB_INSTALL) headers['x-seb-install'] = env.SEB_INSTALL;
   return { baseUrl, headers };
 }

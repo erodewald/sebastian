@@ -85,7 +85,7 @@ Automations live in a separate, **private** home repo; device IDs never enter th
 
 ```bash
 seb init ../home && cd ../home && git init          # once
-export SEB_HOME=. CF_ACCESS_CLIENT_ID=… CF_ACCESS_CLIENT_SECRET=…
+export SEB_HOME=. CF_ACCESS_CLIENT_ID=… CF_ACCESS_CLIENT_SECRET=… SEB_TOKEN=…
 seb pull                                             # generated/home.generated.ts: typed devices + modes
 ```
 
@@ -119,6 +119,12 @@ seb destroy --all
   - Mode conditions, time windows, sunrise/sunset and mode changes start as **Unknown** until the M2 probe suite measures them.
   - A rule mixing devices from two hubs is **Cloud**.
   - `apply` flags any rule whose actual location contradicts the prediction.
+
+## People and locations (ADR-005)
+
+- The first person to sign in is the admin. Admins connect SmartThings locations at `/oauth/start` (each one is a separate install of the same app).
+- Switch locations with the picker in the top bar. Share one under the avatar → **People**: viewer (read and live view), editor (plan, apply, run), owner (manage people). New people must also be allowed by the Access policy.
+- The CLI needs a personal token: avatar → **CLI tokens**, then `export SEB_TOKEN=…`. `seb locations` lists what you can reach; `SEB_INSTALL=<id>` picks one.
 
 ## Web UI
 

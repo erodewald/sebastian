@@ -12,7 +12,7 @@ import {
 } from '@sebastian/dsl';
 import type { DevicesResponse, ManagedRule, StreamMessage } from '@sebastian/protocol';
 import { type FlowNode, flowOf, linearSteps } from './flow.ts';
-import type { Snapshot, Source } from './source.ts';
+import type { LocationSummary, Snapshot, Source } from './source.ts';
 
 /**
  * Demo mode (`?demo`): a made-up home compiled with the real DSL and compiler, and a fake
@@ -269,7 +269,26 @@ function effect(n: Extract<FlowNode, { kind: 'command' }>) {
 }
 
 export function demoSource(): Source {
+  const locations: LocationSummary[] = [
+    {
+      installedAppId: 'e4d3c2b1-0000-4000-8000-0000000demo1',
+      locationId: Home.id,
+      locationName: 'Demo House',
+      role: 'owner',
+      deletedAt: null,
+    },
+    {
+      installedAppId: 'e4d3c2b1-0000-4000-8000-0000000demo2',
+      locationId: 'a1b2c3d4-0000-4000-8000-000000000002',
+      locationName: 'Lake Cabin',
+      role: 'viewer',
+      deletedAt: null,
+    },
+  ];
+  const me = { email: 'you@example.com', isAdmin: true, via: 'access' as const, locations };
   const snap: Snapshot = {
+    me,
+    install: locations[0] as LocationSummary,
     status: {
       installedAppId: 'e4d3c2b1-0000-4000-8000-0000000demo1',
       locationId: Home.id,
@@ -378,6 +397,9 @@ export function demoSource(): Source {
   };
 
   return {
+    async api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+      return demoApi(path, init) as T;
+    },
     async load() {
       return snap;
     },
@@ -441,4 +463,79 @@ export function demoSource(): Source {
       fire(snap.rules.findIndex((r) => r.ruleId === ruleId));
     },
   };
+}
+
+// In-memory stand-ins for the account endpoints, so Settings works in the demo.
+const demoTokens: { id: string; name: string; createdAt: number; lastUsedAt: number | null }[] = [
+  {
+    id: 't1',
+    name: 'laptop',
+    createdAt: Date.now() - 5 * 86400_000,
+    lastUsedAt: Date.now() - 3600_000,
+  },
+];
+const demoMembers: {
+  email: string;
+  role: string;
+  addedBy: string | null;
+  addedAt: number;
+  lastSeenAt: number | null;
+}[] = [
+  {
+    email: 'you@example.com',
+    role: 'owner',
+    addedBy: 'you@example.com',
+    addedAt: Date.now() - 9 * 86400_000,
+    lastSeenAt: Date.now(),
+  },
+  {
+    email: 'friend@example.com',
+    role: 'viewer',
+    addedBy: 'you@example.com',
+    addedAt: Date.now() - 86400_000,
+    lastSeenAt: null,
+  },
+];
+
+function demoApi(path: string, init: { method?: string; body?: unknown }): unknown {
+  const method = init.method ?? (init.body === undefined ? 'GET' : 'POST');
+  const body = (init.body ?? {}) as { name?: string; role?: string };
+  if (path === '/api/tokens' && method === 'GET') return demoTokens;
+  if (path === '/api/tokens' && method === 'POST') {
+    const t = {
+      id: crypto.randomUUID(),
+      name: body.name || 'cli',
+      createdAt: Date.now(),
+      lastUsedAt: null,
+    };
+    demoTokens.unshift(t);
+    return { ...t, token: 'seb_demo_not_a_real_token' };
+  }
+  const tok = /^\/api\/tokens\/(.+)$/.exec(path);
+  if (tok && method === 'DELETE') {
+    const i = demoTokens.findIndex((t) => t.id === tok[1]);
+    if (i >= 0) demoTokens.splice(i, 1);
+    return {};
+  }
+  if (/^\/api\/locations\/[^/]+\/members$/.test(path)) return demoMembers;
+  const mem = /^\/api\/locations\/[^/]+\/members\/(.+)$/.exec(path);
+  if (mem?.[1]) {
+    const email = decodeURIComponent(mem[1]);
+    const i = demoMembers.findIndex((m) => m.email === email);
+    if (method === 'DELETE') {
+      if (i >= 0) demoMembers.splice(i, 1);
+    } else if (i >= 0) {
+      (demoMembers[i] as { role: string }).role = body.role ?? 'viewer';
+    } else {
+      demoMembers.push({
+        email,
+        role: body.role ?? 'viewer',
+        addedBy: 'you@example.com',
+        addedAt: Date.now(),
+        lastSeenAt: null,
+      });
+    }
+    return {};
+  }
+  throw new Error(`demo: ${method} ${path} isn't simulated`);
 }

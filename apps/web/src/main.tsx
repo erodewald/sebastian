@@ -10,7 +10,7 @@ async function pick(): Promise<Source> {
     const { demoSource } = await import('./demo.ts');
     return demoSource();
   }
-  return workerSource;
+  return workerSource();
 }
 
 const theme = new URLSearchParams(location.search).get('theme');

@@ -28,6 +28,7 @@ Setup
   init <dir>        Scaffold a private home repo (automations/, generated/, tsconfig)
   login             Print the URL that starts SmartThings OAuth
   whoami            Location, hubs, devices by integration, ledger
+  locations         Locations you can reach, and your role at each (pick one with SEB_INSTALL)
   pull              Write generated/home.generated.ts (typed devices + modes)
 
 Automations
@@ -46,7 +47,8 @@ Options
   --yes             Don't ask before apply/destroy
 
 Environment
-  SEB_URL, CF_ACCESS_CLIENT_ID + CF_ACCESS_CLIENT_SECRET (or CF_ACCESS_TOKEN), SEB_INSTALL
+  SEB_URL, CF_ACCESS_CLIENT_ID + CF_ACCESS_CLIENT_SECRET (or CF_ACCESS_TOKEN),
+  SEB_TOKEN (personal token: web UI → Tokens), SEB_INSTALL (a location id from \`seb locations\`)
 `;
 
 const TERMINAL = new Set(['complete', 'errored', 'terminated']);
@@ -175,6 +177,29 @@ async function main(argv: string[]): Promise<number> {
     case 'whoami': {
       const w = await api<WhoamiResponse>(cfg, '/api/whoami');
       out(w, () => formatWhoami(w));
+      return 0;
+    }
+    case 'locations': {
+      const me = await api<{
+        email: string;
+        isAdmin: boolean;
+        locations: {
+          installedAppId: string;
+          locationName: string | null;
+          role: string;
+          deletedAt: number | null;
+        }[];
+      }>(cfg, '/api/me');
+      out(me, () =>
+        [
+          `${me.email}${me.isAdmin ? ' (admin)' : ''}`,
+          ...me.locations.map(
+            (l, i) =>
+              `${i === 0 ? '*' : ' '} ${l.installedAppId}  ${(l.locationName ?? '—').padEnd(24)} ${l.role}${l.deletedAt ? '  (disconnected)' : ''}`,
+          ),
+          me.locations.length ? '\n* = default when SEB_INSTALL is unset' : 'No locations yet.',
+        ].join('\n'),
+      );
       return 0;
     }
     case 'status': {
