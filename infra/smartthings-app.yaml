@@ -34,6 +34,7 @@ oauth:
     - x:scenes:*
     - r:rules:*
     - w:rules:*
+    - x:rules:*
     - sse
   redirectUris:
     - https://sebastian.baltar.media/oauth/callback

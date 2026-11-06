@@ -41,9 +41,11 @@
     // Scenes (r:scenes:* x:scenes:*) are registered on the app but NOT requested: asking for
     // both together makes SmartThings' authorize fail with server_error, though each alone works
     // (bisected 2026-11-05). Revisit with the M2 scene-in-rule spike.
+    // x:rules:* is needed by POST /rules/execute (seb run): without it, 403
+    // execute-behavior-fail-invalid-scopes. It isn't in the documented scope table.
     // No installed-apps scope: r:installedapps isn't a valid API Access app scope (adding it to the
     // 9 below gives server_error), and the callback's own GET /installedapps/{id} works without it.
-    "ST_SCOPES": "r:devices:* x:devices:* r:hubs:* r:locations:* w:locations:* x:locations:* r:rules:* w:rules:* sse",
+    "ST_SCOPES": "r:devices:* x:devices:* r:hubs:* r:locations:* w:locations:* x:locations:* r:rules:* w:rules:* x:rules:* sse",
     // SmartThings appId (not a secret); lifecycle CONFIRMATION is accepted only for this app.
     "ST_APP_ID": "dd2a50f8-3307-445b-afc5-c9150094bcc9",
     "USER_AGENT": "sebastian/0.0 (+https://github.com/erodewald/sebastian)"
