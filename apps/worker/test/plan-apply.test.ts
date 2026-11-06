@@ -65,6 +65,8 @@ async function item(sourcePath: string, label: string) {
 }
 
 /** A fake Rules API: rules live in a Map, executionLocation is always Local. */
+let forbidExecute = false;
+
 async function installWithFakeRules() {
   const stub = stubFor(IAID);
   await stub.completeAuth(IAID, tokens(1));
@@ -80,7 +82,14 @@ async function installWithFakeRules() {
       return json({ id });
     }
     const id = url.pathname.split('/').at(-1) ?? '';
-    if (url.pathname.startsWith('/v1/rules/execute/')) return json({ result: 'Success' });
+    if (url.pathname.startsWith('/v1/rules/execute/')) {
+      return forbidExecute
+        ? json(
+            { error: { code: 'ForbiddenError', message: 'execute-behavior-fail-invalid-scopes' } },
+            403,
+          )
+        : json({ result: 'Success' });
+    }
     if (!rules.has(id)) return json({ error: 'not found' }, 404);
     if (m === 'GET') return json({ id, executionLocation: 'Local' });
     if (m === 'PUT') {
@@ -192,5 +201,15 @@ describe('plan and apply', () => {
     const [r] = (await (await call('/api/rules')).json()) as { ruleId: string }[];
     const res = await call(`/api/rules/${r!.ruleId}/execute`, {});
     expect(await res.json()).toEqual({ result: 'Success' });
+
+    // A SmartThings refusal (e.g. missing x:rules:*) is a 502 with its message, not a 500.
+    forbidExecute = true;
+    const denied = await call(`/api/rules/${r!.ruleId}/execute`, {});
+    forbidExecute = false;
+    expect(denied.status).toBe(502);
+    expect(await denied.json()).toMatchObject({
+      error: 'smartthings_rejected',
+      detail: expect.stringMatching(/403.*execute-behavior-fail-invalid-scopes/),
+    });
   });
 });

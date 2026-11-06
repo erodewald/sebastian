@@ -66,6 +66,9 @@ Sources: blog.smartthings.com (Oct 30 2026 "API Additional Details" post), devel
 - Authorize `scope` is space-separated. A literal `+` gives `invalid_scope: unable to build scope from a+b`.
 - Scope combinations failing with `server_error`: `r:scenes:*`+`x:scenes:*` (each alone works; unexplained, reported). The 9 working scopes + `r:installedapps` also fails, because `r:installedapps` isn't a valid scope: the documented scope table has none, and the platform developer said to do what the Developer Center does, which offers no installed-apps scopes. It should be rejected with `invalid_scope`, not `server_error`.
 - The CLI `installedapps` list omits `API_ONLY` installs; `installedapps <id>` and `installedapps:delete <id>` work. (Whether re-authorizing without deleting creates a second install despite `singleInstance` is untested.)
+- `POST /rules/execute/{id}` needs `x:rules:*` (403 `execute-behavior-fail-invalid-scopes` without it). `x:rules:*` is not in the documented scope table.
+- Rules created through the Rules API don't appear in the SmartThings mobile app.
+- First real apply (2026-11-06): contact sensor → Zigbee light on the v2 hub, with `sleep`, read back `executionLocation: Local`, as predicted.
 - An app can read its own installed app (`GET /installedapps/{id}`) without `r:installedapps`.
 - CLI 3.0.0 scope picker has no `sse` and offers `r:installedapps`/`w:installedapps`, which aren't valid API Access app scopes. Docs: OAuth endpoints are documented as `https://api.smartthings.com/v1/oauth/authorize` and `/v1/oauth/token`; we (like Home Assistant) use `/oauth/authorize` and `auth-global.api.smartthings.com/oauth/token`, which work.
 - Location "Bur Oak" has two hubs: SmartThings v2 Hub (fw 000.063.00001; 11 Zigbee, 5 Z-Wave, 5 LAN devices) and a SmartThings Station (fw 000.054.00013; 1 Zigbee, 1 LAN). A rule mixing devices from both hubs can't run locally.

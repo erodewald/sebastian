@@ -1,0 +1,23 @@
+# OAuth settings for the existing app (PLAN §13). Apply with:
+#   smartthings smartapps:oauth:update <appId> -i infra/smartthings-oauth.yaml
+# Keep in sync with the oauth block of infra/smartthings-app.yaml. ST_SCOPES
+# (apps/worker/wrangler.jsonc) must be a subset of `scope`. Re-authorize at
+# /oauth/start afterwards: an existing install keeps the scopes it was granted.
+clientName: Sebastian
+scope:
+  - r:devices:*
+  - x:devices:*
+  - r:hubs:*
+  - r:locations:*
+  - w:locations:*
+  - x:locations:*
+  - r:scenes:*
+  - x:scenes:*
+  - r:rules:*
+  - w:rules:*
+  - x:rules:*
+  - sse
+redirectUris:
+  - https://sebastian.baltar.media/oauth/callback
+corsDomains:
+  - https://sebastian.baltar.media

@@ -15,7 +15,7 @@ import { SEB_ERR, sebErrorCode } from './install-do.js';
 import { LIFECYCLE_PATH, registerLifecycle } from './lifecycle.js';
 import { model } from './model.js';
 import { diff, managedRows, PlanError, verifyItems } from './plan.js';
-import { executeRule } from './rules.js';
+import { executeRule, FatalRuleError } from './rules.js';
 import { st } from './st-client.js';
 import { whoami } from './whoami.js';
 
@@ -39,6 +39,11 @@ export function createApp(opts: { accessKeys?: JWTVerifyGetKey } = {}) {
   registerLifecycle(app);
 
   app.onError((err, c) => {
+    if (err instanceof FatalRuleError) {
+      // SmartThings refused the request (bad rule, missing scope…): its message, not a 500.
+      console.error(JSON.stringify({ smartthingsRejected: err.message }));
+      return c.json({ error: 'smartthings_rejected', detail: err.message }, 502);
+    }
     const code = sebErrorCode(err);
     const status =
       code === SEB_ERR.HALTED || code === SEB_ERR.BREAKER
