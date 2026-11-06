@@ -166,6 +166,15 @@ export class InstallDO extends DurableObject<Env> {
     };
   }
 
+  /** The ApplyWorkflow instance most recently started for this install (the apply lock). */
+  async lastApply(): Promise<string | null> {
+    return this.getMeta('last_apply') ?? null;
+  }
+
+  async setLastApply(instanceId: string): Promise<void> {
+    this.setMeta('last_apply', instanceId);
+  }
+
   async setLocationId(locationId: string): Promise<void> {
     this.setMeta('location_id', locationId);
   }

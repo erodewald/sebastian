@@ -1,8 +1,10 @@
+import type { ApplyParams } from './apply-workflow.js';
 import type { InstallDO } from './install-do.js';
 
 export interface Env {
   INSTALL: DurableObjectNamespace<InstallDO>;
   DB: D1Database;
+  APPLY: Workflow<ApplyParams>;
 
   PUBLIC_ORIGIN: string;
   ACCESS_TEAM_DOMAIN: string;

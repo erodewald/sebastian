@@ -48,6 +48,7 @@ export interface Device {
   zwave?: { hubId?: string; driverId?: string };
   lan?: { hubId?: string; driverId?: string };
   virtual?: { hubId?: string; driverId?: string; executingLocally?: boolean };
+  matter?: { hubId?: string; driverId?: string };
   hub?: { hubEui?: string; firmwareVersion?: string; hubDrivers?: unknown[] };
 }
 
@@ -68,10 +69,10 @@ export function integrationTypeOf(d: Device): IntegrationType {
   if (d.zwave || t.includes('ZWAVE')) return 'ZWAVE';
   if (d.lan || t.includes('LAN')) return 'LAN';
   if (d.virtual || t.includes('VIRTUAL')) return 'VIRTUAL';
-  if (t.includes('MATTER')) return 'MATTER';
+  if (d.matter || t.includes('MATTER')) return 'MATTER';
   return 'CLOUD';
 }
 
 export function hubIdOf(d: Device): string | undefined {
-  return d.zigbee?.hubId ?? d.zwave?.hubId ?? d.lan?.hubId ?? d.virtual?.hubId;
+  return d.zigbee?.hubId ?? d.zwave?.hubId ?? d.lan?.hubId ?? d.matter?.hubId ?? d.virtual?.hubId;
 }

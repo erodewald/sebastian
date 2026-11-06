@@ -2,6 +2,7 @@ import { createApp } from './app.js';
 import { retention, tokenHealthAndRollup } from './cron.js';
 import type { Env } from './env.js';
 
+export { ApplyWorkflow } from './apply-workflow.js';
 export { InstallDO } from './install-do.js';
 
 const app = createApp();

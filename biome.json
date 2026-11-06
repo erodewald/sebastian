@@ -35,6 +35,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["packages/compiler/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noThenProperty": "off"
+          }
+        }
+      }
     }
   ]
 }
