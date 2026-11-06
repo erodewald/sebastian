@@ -24,6 +24,8 @@ const MIN_CREATE_GAP_MS = 15_000;
 /** A stream that ends sooner than this without a goodbye counts as a failure. */
 const MIN_HEALTHY_MS = 30_000;
 const MAX_ERRORS = 5;
+/** Consecutive retryable failures (429, 5xx, network) before giving up until a tab reconnects. */
+const MAX_FAILURES = 3;
 /** No frame (event or welcome keepalive) for this long = stalled; reconnect. */
 export const STALL_MS = 150_000;
 const RECENT = 50;
@@ -37,6 +39,19 @@ interface Config {
 }
 
 type Status = Extract<StreamMessage, { type: 'status' }>;
+
+/** A SmartThings rejection, with its HTTP status for the retry policy. */
+class StreamError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/** ±20% jitter, as the SSE guide recommends for backoff. */
+const jitter = (ms: number) => Math.round(ms * (0.8 + Math.random() * 0.4));
 
 /** Parse complete SSE frames out of `buf`; returns the frames and the unconsumed tail. */
 export function parseSse(buf: string): { frames: { event: string; data: string }[]; rest: string } {
@@ -55,10 +70,15 @@ export function parseSse(buf: string): { frames: { event: string; data: string }
   return { frames, rest };
 }
 
+/**
+ * Device filters for the managed rules' devices, 10 ids per filter (the documented limit).
+ *
+ * No MODE_EVENT: SmartThings rejects it on a LOCATIONIDS filter (400 "eventType MODE_EVENT not
+ * allowed for filterType LOCATIONIDS and version 20250122", 2026-11-06), although the SSE guide
+ * lists it. Reported; see docs/platform-facts.md.
+ */
 export function filtersFor(cfg: Config) {
-  const filters: { type: 'DEVICEIDS' | 'LOCATIONIDS'; value: string[]; eventType: string[] }[] = [
-    { type: 'LOCATIONIDS', value: [cfg.locationId], eventType: ['MODE_EVENT'] },
-  ];
+  const filters: { type: 'DEVICEIDS' | 'LOCATIONIDS'; value: string[]; eventType: string[] }[] = [];
   for (
     let i = 0;
     i < cfg.deviceIds.length && filters.length < MAX_FILTERS;
@@ -85,6 +105,8 @@ export class StreamDO extends DurableObject<Env> {
   private lastCreateAt = 0;
   private retryAt?: number;
   private goodbye = false;
+  /** Set when retrying can't help (a 4xx, or MAX_FAILURES in a row); a new tab clears it. */
+  private halted = false;
   private recent: StreamMessage[] = [];
   /** Overridable in tests. */
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -140,8 +162,13 @@ export class StreamDO extends DurableObject<Env> {
     server.send(JSON.stringify({ ...this.status, deviceIds: cfg.deviceIds }));
     for (const m of this.recent) server.send(JSON.stringify(m));
 
-    if (changed && this.reader) await this.reader.cancel('filters changed').catch(() => {});
+    if (changed && this.reader) await this.updateFilters(cfg);
     this.stopped = false;
+    if (this.halted) {
+      // Someone is looking again: one fresh attempt.
+      this.halted = false;
+      this.failures = 0;
+    }
     void this.run();
     if ((await this.ctx.storage.getAlarm()) === null)
       await this.ctx.storage.setAlarm(Date.now() + WATCHDOG_MS);
@@ -174,7 +201,7 @@ export class StreamDO extends DurableObject<Env> {
       return;
     }
     this.cfg ??= await this.ctx.storage.get<Config>('cfg');
-    if (!this.running) void this.run();
+    if (!this.running && !this.halted) void this.run();
     else if (this.reader && Date.now() - this.lastFrameAt > STALL_MS) {
       await this.reader.cancel('stalled').catch(() => {});
     }
@@ -185,6 +212,25 @@ export class StreamDO extends DurableObject<Env> {
     this.stopped = true;
     await this.reader?.cancel('no clients').catch(() => {});
     await this.ctx.storage.deleteAlarm();
+  }
+
+  private failures = 0;
+
+  /**
+   * Change an active subscription's filters in place (the SSE guide: prefer PUT over recreating).
+   * If the PUT fails, fall back to ending the stream so the loop creates a new one.
+   */
+  private async updateFilters(cfg: Config) {
+    const id = this.subscriptionId;
+    if (!id) return;
+    const res = await st(installStub(this.env, cfg.installedAppId), {
+      method: 'PUT',
+      path: `/v1/sse/subscriptions/${id}`,
+      body: { subscriptionFilters: filtersFor(cfg) },
+      category: 'verify',
+    }).catch(() => undefined);
+    if (res?.ok) this.setStatus('streaming');
+    else await this.reader?.cancel('filters changed').catch(() => {});
   }
 
   private recordError(detail: string) {
@@ -210,8 +256,13 @@ export class StreamDO extends DurableObject<Env> {
         }).catch(() => {});
         await this.ctx.storage.delete('subscriptionId');
       }
-      while (!this.stopped && this.sockets().length > 0 && this.cfg) {
+      while (!this.stopped && !this.halted && this.sockets().length > 0 && this.cfg) {
         const cfg = this.cfg;
+        if (cfg.deviceIds.length === 0) {
+          this.halted = true;
+          this.setStatus('idle', 'no devices in managed rules: nothing to stream');
+          break;
+        }
         const stub = installStub(this.env, cfg.installedAppId);
         const gap = this.lastCreateAt + MIN_CREATE_GAP_MS - Date.now();
         if (gap > 0) await this.sleep(gap);
@@ -229,14 +280,22 @@ export class StreamDO extends DurableObject<Env> {
             category: 'verify',
           });
           if (!created.ok || !created.body.registrationUrl || !created.body.subscriptionId) {
-            throw new Error(
-              `create subscription: HTTP ${created.status} ${JSON.stringify(created.body).slice(0, 200)}`,
+            throw new StreamError(
+              created.status,
+              `create subscription: HTTP ${created.status} ${JSON.stringify(created.body).slice(0, 600)}`,
             );
           }
           this.subscriptionId = created.body.subscriptionId;
           await this.ctx.storage.put('subscriptionId', this.subscriptionId);
           const reg = new URL(created.body.registrationUrl);
-          const body = await stub.sseOpen(reg.pathname, Object.fromEntries(reg.searchParams));
+          const body = await stub
+            .sseOpen(reg.pathname, Object.fromEntries(reg.searchParams))
+            .catch((e: unknown) => {
+              // The guide: a 403 here means the subscription is gone; create a new one.
+              const msg = e instanceof Error ? e.message : String(e);
+              const status = Number(/HTTP (\d{3})/.exec(msg)?.[1] ?? 0);
+              throw status && status !== 403 ? new StreamError(status, msg) : e;
+            });
           openedAt = this.lastFrameAt = Date.now();
           this.setStatus('streaming');
           await this.consume(body);
@@ -244,26 +303,41 @@ export class StreamDO extends DurableObject<Env> {
             throw new Error(`stream closed after ${Date.now() - openedAt} ms without a goodbye`);
           }
           backoff = 0;
+          this.failures = 0;
         } catch (e) {
           const code = sebErrorCode(e);
           const detail = e instanceof Error ? e.message : String(e);
           this.recordError(detail);
-          // Breakers (402 halt, storm, daily allowance) and client errors won't clear on their own
-          // soon: back off hard. Anything else: 30 s, doubling to 10 min.
-          const clientError = /HTTP 4(?!29)\d\d/.test(detail);
-          backoff =
-            code === SEB_ERR.HALTED || code === SEB_ERR.BREAKER || code === SEB_ERR.NEEDS_REAUTH
-              ? 5 * 60_000
-              : clientError
-                ? 15 * 60_000
-                : Math.min(10 * 60_000, Math.max(30_000, backoff * 2));
-          this.retryAt = Date.now() + backoff;
-          this.setStatus('error', detail);
+          this.failures++;
+          // The SSE guide's error table: a 4xx other than 429 (400, 403, 418…) is rejected again
+          // if repeated unchanged, so don't retry it. Our own breakers and re-auth won't clear by
+          // retrying either. 429, 5xx and network errors: exponential backoff with jitter, and
+          // give up after MAX_FAILURES in a row. Either way a newly opened tab tries once more.
+          const status = e instanceof StreamError ? e.status : 0;
+          const permanent =
+            (status >= 400 && status < 500 && status !== 429) ||
+            code === SEB_ERR.HALTED ||
+            code === SEB_ERR.BREAKER ||
+            code === SEB_ERR.NEEDS_REAUTH;
+          if (permanent || this.failures >= MAX_FAILURES) {
+            this.halted = true;
+            this.retryAt = undefined;
+            this.setStatus(
+              'error',
+              `${detail}${permanent ? '' : ` (${this.failures} failures in a row)`}. Stopped: reload to retry.`,
+            );
+          } else {
+            backoff = jitter(Math.min(10 * 60_000, Math.max(30_000, backoff * 2)));
+            this.retryAt = Date.now() + backoff;
+            this.setStatus('error', detail);
+          }
         } finally {
           this.reader = undefined;
           const id = this.subscriptionId;
           this.subscriptionId = undefined;
-          if (id) {
+          // After a goodbye the subscription is already gone (a DELETE would just 403).
+          if (id && this.goodbye) await this.ctx.storage.delete('subscriptionId');
+          else if (id) {
             await st(stub, {
               method: 'DELETE',
               path: `/v1/sse/subscriptions/${id}`,
@@ -272,6 +346,7 @@ export class StreamDO extends DurableObject<Env> {
             await this.ctx.storage.delete('subscriptionId');
           }
         }
+        if (this.halted) break;
         if (backoff && !this.stopped) await this.sleep(backoff);
         else if (!this.stopped) backoff = 1; // a clean goodbye: reconnect (after the gap), shown as "reconnecting"
       }
