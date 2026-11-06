@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ConnectionBanner } from './components/ConnectionBanner.tsx';
 import { DeviceList } from './components/DeviceList.tsx';
 import { EventLog } from './components/EventLog.tsx';
 import { PathView } from './components/PathView.tsx';
 import { RuleList } from './components/RuleList.tsx';
 import { RuleView } from './components/RuleView.tsx';
 import { TopBar } from './components/TopBar.tsx';
-import { live } from './live.ts';
+import { live, useLive } from './live.ts';
 import type { Snapshot, Source } from './source.ts';
 import { ApiError } from './source.ts';
 import { deviceIndex } from './util.ts';
@@ -44,6 +45,7 @@ export function App({ source }: { source: Source }) {
   }, []);
 
   const idx = useMemo(() => deviceIndex(snap?.devices), [snap]);
+  const liveInstall = useLive((s) => s.status?.install);
   const rule = snap?.rules.find((r) => r.ruleId === selected) ?? snap?.rules[0];
 
   if (error)
@@ -61,6 +63,10 @@ export function App({ source }: { source: Source }) {
   return (
     <div className="app">
       <TopBar snap={snap} idx={idx} />
+      <ConnectionBanner
+        state={liveInstall === 'DELETED' ? 'DELETED' : snap.status.tokenState}
+        deletedAt={snap.status.deletedAt ?? (liveInstall === 'DELETED' ? Date.now() : null)}
+      />
       <div className="shell">
         <nav className="sidebar">
           <RuleList rules={snap.rules} selected={rule?.ruleId} idx={idx} />

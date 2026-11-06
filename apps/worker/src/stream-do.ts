@@ -175,6 +175,23 @@ export class StreamDO extends DurableObject<Env> {
     return new Response(null, { status: 101, webSocket: client });
   }
 
+  /** The install was deleted in SmartThings: stop for good and tell every open tab. */
+  async disconnect(reason: string) {
+    this.halted = true;
+    this.stopped = true;
+    await this.reader?.cancel('install deleted').catch(() => {});
+    await this.ctx.storage.deleteAlarm();
+    this.status = {
+      type: 'status',
+      state: 'error',
+      install: 'DELETED',
+      deviceIds: [],
+      detail: reason,
+      at: Date.now(),
+    };
+    this.broadcast(this.status);
+  }
+
   override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
     if (message === 'ping') ws.send(JSON.stringify({ type: 'keepalive', at: Date.now() }));
   }

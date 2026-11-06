@@ -3,7 +3,8 @@ import { z } from 'zod';
 
 /** Wire contract between the Worker and the `seb` CLI / CI. */
 
-export const InstallState = z.enum(['ACTIVE', 'NEEDS_REAUTH', 'NONE']);
+/** DELETED: removed by the user in the SmartThings app (Linked services). */
+export const InstallState = z.enum(['ACTIVE', 'NEEDS_REAUTH', 'NONE', 'DELETED']);
 
 export const WhoamiResponse = z.object({
   installedAppId: z.string(),
@@ -186,6 +187,8 @@ export type StreamMessage =
       errors?: { at: number; detail: string }[];
       /** When an errored stream will try again. */
       retryAt?: number;
+      /** Set when the SmartThings install itself is gone. */
+      install?: 'DELETED';
       at: number;
     }
   | {

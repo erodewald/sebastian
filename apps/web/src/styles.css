@@ -1603,3 +1603,22 @@ button.stream-pill {
   word-break: break-word;
   user-select: text;
 }
+
+.conn-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: color-mix(in srgb, var(--bad) 12%, var(--bg-2));
+  border-bottom: 1px solid color-mix(in srgb, var(--bad) 40%, var(--line));
+  color: var(--fg);
+  flex-shrink: 0;
+}
+.conn-banner > svg {
+  color: var(--bad);
+  flex-shrink: 0;
+}
+.cb-text {
+  flex: 1;
+  min-width: 0;
+}
