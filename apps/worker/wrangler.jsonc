@@ -9,9 +9,15 @@
   "observability": { "enabled": true },
 
   "durable_objects": {
-    "bindings": [{ "name": "INSTALL", "class_name": "InstallDO" }]
+    "bindings": [
+      { "name": "INSTALL", "class_name": "InstallDO" },
+      { "name": "STREAM", "class_name": "StreamDO" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["InstallDO"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["InstallDO"] },
+    { "tag": "v2", "new_sqlite_classes": ["StreamDO"] }
+  ],
 
   "workflows": [{ "name": "sebastian-apply", "binding": "APPLY", "class_name": "ApplyWorkflow" }],
 

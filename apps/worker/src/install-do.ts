@@ -478,6 +478,37 @@ export class InstallDO extends DurableObject<Env> {
     }
   }
 
+  /**
+   * Open an SSE event stream (a subscription's `registrationUrl`) and hand back its body.
+   * Only the path/query of the registration URL is used: the host is always the SmartThings API.
+   * Metered as `verify`; the caller (StreamDO) owns reading and closing the stream.
+   */
+  async sseOpen(
+    path: string,
+    query: Record<string, string> = {},
+  ): Promise<ReadableStream<Uint8Array>> {
+    if (!path.startsWith('/') || path.startsWith('//'))
+      throw new Error('path must be origin-relative');
+    this.checkBreakers('verify', 'GET', path);
+    const url = new URL(path, ST_API_ORIGIN);
+    for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
+    const token = await this.currentAccessToken();
+    const res = await this.http(url.toString(), {
+      method: 'GET',
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: 'text/event-stream',
+        'user-agent': this.env.USER_AGENT,
+      },
+    });
+    this.meter('verify', routeTemplate('GET', url.pathname), !res.ok);
+    if (!res.ok || !res.body) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`SSE activate: HTTP ${res.status} ${text.slice(0, 200)}`);
+    }
+    return res.body;
+  }
+
   private checkBreakers(category: CallCategory, method: HttpMethod, path: string) {
     if (this.breaker(BREAKER_HALT)) {
       throw sebError(SEB_ERR.HALTED, 'calls halted after a 402; run `seb resume` once resolved');
