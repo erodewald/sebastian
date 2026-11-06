@@ -73,14 +73,23 @@ export function TopBar({ snap, idx }: { snap: Snapshot; idx: DeviceIndex }) {
 
       <div
         className={`stream-pill tone-${tone}`}
-        title={
-          status?.subscriptionId
-            ? `SSE subscription ${status.subscriptionId}${status.detail ? `\n${status.detail}` : ''}`
-            : (status?.detail ?? '')
-        }
+        title={[
+          status?.subscriptionId ? `SSE subscription ${status.subscriptionId}` : '',
+          ...(status?.errors ?? []).map(
+            (e) => `${new Date(e.at).toLocaleTimeString()}  ${e.detail}`,
+          ),
+        ]
+          .filter(Boolean)
+          .join('\n')}
       >
         <span className="dot" />
         <b>{state === 'streaming' ? 'live' : state}</b>
+        {state === 'error' && status?.detail && (
+          <span className="small pill-detail">{status.detail}</span>
+        )}
+        {state === 'error' && status?.retryAt && (
+          <span className="small muted">retry in {until(status.retryAt, now)}</span>
+        )}
         {last && state === 'streaming' && (
           <span className="small">
             <span className="muted">CF→tab</span>{' '}

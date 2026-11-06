@@ -1523,3 +1523,10 @@ button {
     display: none;
   }
 }
+
+.pill-detail {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--bad);
+}

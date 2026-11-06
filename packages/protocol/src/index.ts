@@ -182,6 +182,10 @@ export type StreamMessage =
       subscriptionId?: string;
       deviceIds: string[];
       detail?: string;
+      /** Recent failures, newest first (persisted across restarts). */
+      errors?: { at: number; detail: string }[];
+      /** When an errored stream will try again. */
+      retryAt?: number;
       at: number;
     }
   | {
