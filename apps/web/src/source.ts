@@ -14,6 +14,8 @@ export interface InstallStatus {
   accessExpiresAt: number | null;
   refreshExpiresAt: number | null;
   rotatedAt: number | null;
+  /** When the user removed the app in SmartThings (Linked services). */
+  deletedAt?: number | null;
 }
 
 export interface Snapshot {

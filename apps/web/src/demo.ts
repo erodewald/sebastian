@@ -273,7 +273,8 @@ export function demoSource(): Source {
     status: {
       installedAppId: 'e4d3c2b1-0000-4000-8000-0000000demo1',
       locationId: Home.id,
-      tokenState: 'ACTIVE',
+      tokenState: new URLSearchParams(location.search).has('deleted') ? 'DELETED' : 'ACTIVE',
+      deletedAt: new URLSearchParams(location.search).has('deleted') ? Date.now() - 3600_000 : null,
       accessExpiresAt: Date.now() + 18 * 3600_000,
       refreshExpiresAt: Date.now() + 29 * 86400_000,
       rotatedAt: Date.now() - 6 * 3600_000,
