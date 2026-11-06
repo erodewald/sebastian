@@ -15,7 +15,8 @@
     "@sebastian/protocol": "workspace:*",
     "@sebastian/compiler": "workspace:*",
     "@sebastian/dsl": "workspace:*",
-    "esbuild": "^0.28.0"
+    "esbuild": "^0.28.0",
+    "@sebastian/codegen": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",

@@ -1,10 +1,10 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { capSpec, generate, identifier } from '@sebastian/codegen';
 import type { ModelResponse } from '@sebastian/protocol';
 import { ruleHash } from '@sebastian/protocol';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { capSpec, generate, identifier } from '../src/codegen.ts';
 import { loadHome } from '../src/load.ts';
 
 const model: ModelResponse = {

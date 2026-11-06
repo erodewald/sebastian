@@ -10,7 +10,12 @@ import {
   sleep,
   sunset,
 } from '@sebastian/dsl';
-import type { DevicesResponse, ManagedRule, StreamMessage } from '@sebastian/protocol';
+import type {
+  DevicesResponse,
+  ManagedRule,
+  ModelResponse,
+  StreamMessage,
+} from '@sebastian/protocol';
 import { type FlowNode, flowOf, linearSteps } from './flow.ts';
 import type { LocationSummary, Snapshot, Source } from './source.ts';
 
@@ -182,12 +187,12 @@ export default automation('Kitchen counters')
   {
     path: 'automations/leak-shutoff.ts',
     text: `import { automation } from '@sebastian/dsl';
-import { basementLeak, mainValve } from '../generated/home.generated.ts';
+import { basementLeakSensor, mainWaterValve } from '../generated/home.generated.ts';
 
 // The valve is a cloud-connected device, so this one can't run on the hub.
 export default automation('Leak shutoff')
-  .when(basementLeak.waterSensor.water.changesTo('wet'))
-  .do(mainValve.valve.close());
+  .when(basementLeakSensor.waterSensor.water.changesTo('wet'))
+  .do(mainWaterValve.valve.close());
 `,
     ast: automation('Leak shutoff')
       .when(basementLeak.waterSensor.water.changesTo('wet'))
@@ -319,6 +324,26 @@ export function demoSource(): Source {
     rules: rules(),
     demo: true,
   };
+  let workspace:
+    | Map<
+        string,
+        { sourcePath: string; source: string; updatedAt: number; updatedBy: string | null }
+      >
+    | undefined;
+  let lastApply:
+    | {
+        items: {
+          sourcePath: string;
+          name: string;
+          source?: string;
+          predicted: string;
+          rule: unknown;
+        }[];
+        ops: { op: string; sourcePath: string; name: string }[];
+        at: number;
+        applied?: boolean;
+      }
+    | undefined;
   const ruleFlows = snap.rules.map((r) => ({ r, steps: linearSteps(flowOf(r.rule).steps) }));
   let emit: ((m: StreamMessage) => void) | undefined;
   const timers = new Set<ReturnType<typeof setTimeout>>();
@@ -398,10 +423,128 @@ export function demoSource(): Source {
 
   return {
     async api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+      const method = init.method ?? (init.body === undefined ? 'GET' : 'POST');
+      if (path.startsWith('/api/model')) return demoModel() as T;
+      if (path === '/api/automations' && method === 'GET') {
+        if (!workspace)
+          workspace = new Map(
+            snap.rules.map((r) => [
+              r.sourcePath,
+              {
+                sourcePath: r.sourcePath,
+                source: r.source ?? '',
+                updatedAt: r.appliedAt,
+                updatedBy: null as string | null,
+              },
+            ]),
+          );
+        return [...workspace.values()].sort((a, b) =>
+          a.sourcePath.localeCompare(b.sourcePath),
+        ) as T;
+      }
+      const ws = /^\/api\/automations\/(.+)$/.exec(path);
+      if (ws?.[1]) {
+        const p = decodeURIComponent(ws[1]);
+        workspace ??= new Map();
+        if (method === 'DELETE') workspace.delete(p);
+        else
+          workspace.set(p, {
+            sourcePath: p,
+            source: (init.body as { source: string }).source,
+            updatedAt: Date.now(),
+            updatedBy: 'you@example.com',
+          });
+        return {} as T;
+      }
+      if (path === '/api/plan' || path === '/api/apply') {
+        const items = (
+          init.body as {
+            items: {
+              sourcePath: string;
+              name: string;
+              source?: string;
+              predicted: string;
+              rule: unknown;
+            }[];
+          }
+        ).items;
+        const byPath = new Map(snap.rules.map((r) => [r.sourcePath, r]));
+        const ops = [
+          ...items.map((i) => {
+            const r = byPath.get(i.sourcePath);
+            const op = !r ? 'create' : r.source === i.source ? 'noop' : 'update';
+            return {
+              op,
+              sourcePath: i.sourcePath,
+              name: i.name,
+              predicted: i.predicted,
+              ...(r ? { ruleId: r.ruleId, lastActual: r.actual ?? undefined } : {}),
+            };
+          }),
+          ...snap.rules
+            .filter((r) => !items.some((i) => i.sourcePath === r.sourcePath))
+            .map((r) => ({
+              op: 'delete',
+              sourcePath: r.sourcePath,
+              name: r.name,
+              ruleId: r.ruleId,
+            })),
+        ];
+        if (path === '/api/plan') return { ops } as T;
+        const changed = ops.filter((o) => o.op !== 'noop');
+        if (!changed.length) return { ops, instanceId: null } as T;
+        lastApply = { items, ops, at: Date.now() };
+        return { ops, instanceId: 'demo-apply' } as T;
+      }
+      if (path.startsWith('/api/apply/') && lastApply) {
+        const done = Date.now() - lastApply.at > 2500;
+        if (done && !lastApply.applied) {
+          lastApply.applied = true;
+          for (const o of lastApply.ops) {
+            const item = lastApply.items.find((i) => i.sourcePath === o.sourcePath);
+            const idx = snap.rules.findIndex((r) => r.sourcePath === o.sourcePath);
+            if (o.op === 'delete' && idx >= 0) snap.rules.splice(idx, 1);
+            else if (item && o.op !== 'noop') {
+              const rule = {
+                ruleId: (o as { ruleId?: string }).ruleId ?? crypto.randomUUID(),
+                sourcePath: item.sourcePath,
+                name: `[seb] ${item.name}`,
+                predicted: item.predicted,
+                actual: item.predicted === 'Cloud' ? 'Cloud' : 'Local',
+                appliedAt: Date.now(),
+                source: item.source ?? '',
+                rule: item.rule,
+                reasons: [],
+                deviceIds: [],
+              };
+              if (idx >= 0) snap.rules[idx] = rule;
+              else snap.rules.push(rule);
+            }
+          }
+        }
+        return {
+          instanceId: 'demo-apply',
+          status: done ? 'complete' : 'running',
+          ...(done
+            ? {
+                results: lastApply.ops
+                  .filter((o) => o.op !== 'noop')
+                  .map((o) => ({
+                    op: o.op,
+                    sourcePath: o.sourcePath,
+                    ruleId: (o as { ruleId?: string }).ruleId ?? 'new',
+                    predicted: (o as { predicted?: string }).predicted,
+                    actual: (o as { predicted?: string }).predicted === 'Cloud' ? 'Cloud' : 'Local',
+                  })),
+              }
+            : {}),
+        } as T;
+      }
       return demoApi(path, init) as T;
     },
     async load() {
-      return snap;
+      // a fresh object each time, as the Worker's JSON would be
+      return { ...snap, rules: [...snap.rules] };
     },
     connect(onMessage, onSocket) {
       emit = onMessage;
@@ -538,4 +681,78 @@ function demoApi(path: string, init: { method?: string; body?: unknown }): unkno
     return {};
   }
   throw new Error(`demo: ${method} ${path} isn't simulated`);
+}
+
+/** The demo home as /api/model would return it (capability definitions rebuilt from the specs). */
+function demoModel(): ModelResponse {
+  const capDefs: Record<string, unknown> = {};
+  const attrDef = (a: {
+    type: string;
+    values?: readonly string[];
+    unit?: string;
+    integer?: boolean;
+  }) => ({
+    schema: {
+      properties: {
+        value:
+          a.type === 'enum'
+            ? { type: 'string', enum: a.values }
+            : { type: a.type === 'number' ? (a.integer ? 'integer' : 'number') : a.type },
+        ...(a.unit ? { unit: { type: 'string', enum: [a.unit] } } : {}),
+      },
+    },
+  });
+  for (const d of SPECS) {
+    for (const [cap, spec] of Object.entries(d.components.main ?? {})) {
+      capDefs[`${cap}/1`] = {
+        attributes: Object.fromEntries(
+          Object.entries(spec.attributes).map(([k, a]) => [k, attrDef(a as never)]),
+        ),
+        commands: Object.fromEntries(
+          Object.entries(spec.commands).map(([k, args]) => [
+            k,
+            {
+              arguments: (
+                args as { name: string; type: string; optional?: boolean; values?: string[] }[]
+              ).map((x) => ({
+                name: x.name,
+                optional: x.optional,
+                schema: x.type === 'enum' ? { type: 'string', enum: x.values } : { type: x.type },
+              })),
+            },
+          ]),
+        ),
+      };
+    }
+  }
+  return {
+    location: { locationId: Home.id, name: 'Demo House', timeZoneId: 'America/Chicago' },
+    modes: [
+      { id: 'mode-home', name: 'Home' },
+      { id: 'mode-night', name: 'Night' },
+      { id: 'mode-away', name: 'Away' },
+    ],
+    rooms: [...new Set(SPECS.map((d) => d.room).filter(Boolean))].map((r) => ({
+      roomId: `room-${r}`,
+      name: r as string,
+    })),
+    hubs: [
+      { hubId: HUB, name: 'SmartThings Hub v2' },
+      { hubId: STATION, name: 'SmartThings Station' },
+    ],
+    devices: SPECS.map((d) => ({
+      deviceId: d.id,
+      label: d.label,
+      ...(d.room ? { roomId: `room-${d.room}` } : {}),
+      integrationType: d.integrationType,
+      ...(d.hubId ? { hubId: d.hubId } : {}),
+      components: [
+        {
+          id: 'main',
+          capabilities: Object.keys(d.components.main ?? {}).map((id) => ({ id, version: 1 })),
+        },
+      ],
+    })),
+    capabilities: capDefs,
+  };
 }

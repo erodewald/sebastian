@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { ConnectionBanner } from './components/ConnectionBanner.tsx';
 import { DeviceList } from './components/DeviceList.tsx';
 import { EventLog } from './components/EventLog.tsx';
@@ -12,13 +12,19 @@ import type { Me, Snapshot, Source } from './source.ts';
 import { ApiError, NoLocations } from './source.ts';
 import { deviceIndex } from './util.ts';
 
+// The editor (CodeMirror + the compile sandbox) loads only when someone opens it.
+const Editor = lazy(() => import('./components/Editor.tsx').then((m) => ({ default: m.Editor })));
+
 export function App({ source }: { source: Source }) {
   const [snap, setSnap] = useState<Snapshot>();
   const [error, setError] = useState<string>();
   const [noLocations, setNoLocations] = useState<Me>();
   const [settings, setSettings] = useState(false);
   const [selected, setSelected] = useState<string>(() => location.hash.slice(1));
+  const [reloads, setReloads] = useState(0);
+  const editing = selected === 'edit';
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `reloads` is the reload trigger
   useEffect(() => {
     source
       .load()
@@ -32,7 +38,7 @@ export function App({ source }: { source: Source }) {
           setError('Not signed in to Sebastian. Reload to sign in through Access.');
         else setError(e instanceof Error ? e.message : String(e));
       });
-  }, [source]);
+  }, [source, reloads]);
 
   useEffect(() => {
     if (!snap) return;
@@ -88,7 +94,7 @@ export function App({ source }: { source: Source }) {
 
   return (
     <div className="app">
-      <TopBar snap={snap} idx={idx} onSettings={() => setSettings(true)} />
+      <TopBar snap={snap} idx={idx} onSettings={() => setSettings(true)} editing={editing} />
       {settings && (
         // biome-ignore lint/a11y/noStaticElementInteractions: backdrop click is a shortcut; Escape and the close button also close it
         <div
@@ -107,29 +113,35 @@ export function App({ source }: { source: Source }) {
         state={liveInstall === 'DELETED' ? 'DELETED' : snap.status.tokenState}
         deletedAt={snap.status.deletedAt ?? (liveInstall === 'DELETED' ? Date.now() : null)}
       />
-      <div className="shell">
-        <nav className="sidebar">
-          <RuleList rules={snap.rules} selected={rule?.ruleId} idx={idx} />
-          <DeviceList devices={snap.devices} rules={snap.rules} idx={idx} />
-        </nav>
-        <main className="main">
-          {rule ? (
-            <RuleView key={rule.ruleId} rule={rule} idx={idx} source={source} snap={snap} />
-          ) : (
-            <div className="empty">
-              <h2>No managed rules</h2>
-              <p className="muted">
-                Write one in your home repo&apos;s <code>automations/</code>, then run{' '}
-                <code>seb apply</code>.
-              </p>
-            </div>
-          )}
-        </main>
-        <aside className="aside">
-          <PathView idx={idx} snap={snap} />
-          <EventLog idx={idx} rules={snap.rules} />
-        </aside>
-      </div>
+      {editing ? (
+        <Suspense fallback={<div className="empty muted">Loading the editor…</div>}>
+          <Editor source={source} snap={snap} onApplied={() => setReloads((n) => n + 1)} />
+        </Suspense>
+      ) : (
+        <div className="shell">
+          <nav className="sidebar">
+            <RuleList rules={snap.rules} selected={rule?.ruleId} idx={idx} />
+            <DeviceList devices={snap.devices} rules={snap.rules} idx={idx} />
+          </nav>
+          <main className="main">
+            {rule ? (
+              <RuleView key={rule.ruleId} rule={rule} idx={idx} source={source} snap={snap} />
+            ) : (
+              <div className="empty">
+                <h2>No managed rules</h2>
+                <p className="muted">
+                  Write one in the <a href="#edit">editor</a>, or in your home repo&apos;s{' '}
+                  <code>automations/</code> and run <code>seb apply</code>.
+                </p>
+              </div>
+            )}
+          </main>
+          <aside className="aside">
+            <PathView idx={idx} snap={snap} />
+            <EventLog idx={idx} rules={snap.rules} />
+          </aside>
+        </div>
+      )}
     </div>
   );
 }

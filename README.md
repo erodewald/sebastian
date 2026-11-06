@@ -107,6 +107,7 @@ seb apply    # deploy via ApplyWorkflow; reports where SmartThings actually runs
 seb run pantry-light.ts   # execute it now
 seb rules    # what's managed and where it runs
 seb destroy --all
+seb export   # write the location's automations (incl. ones edited in the web UI) to automations/
 ```
 
 - **DSL:**
@@ -130,6 +131,7 @@ seb destroy --all
 
 Open `https://sebastian.baltar.media/` (Access login). `?demo` shows a made-up home with simulated events; `?theme=light|dark` overrides the system theme.
 
+- **Code** (top bar): write automations in the browser, with completions for your devices (imported automatically), the compiled Rules JSON and locality prediction as you type, then **Plan** and **Apply**. Sources are kept per location and autosaved; any apply, web or CLI, makes them exactly what was applied. `seb export` writes them to your home repo. Compiling happens in a sandboxed iframe (ADR-006).
 - **Rules** (left): every managed rule, where SmartThings runs it, and the devices it uses with their latest values.
 - **Flow**: WHEN → ONLY IF → DO, read back from the stored Rules JSON. A run lights it up: the trigger's device event opens the run, each command step turns green when the device reports the new value, sleeps count down.
 - **Code**: the TypeScript next to the compiled Rules JSON. Hovering either highlights the matching flow step, and the other way round.

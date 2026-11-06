@@ -32,6 +32,14 @@ import {
 } from './tenancy.js';
 import { devicesFromD1, managedDeviceIds, ruleDeviceIds } from './ui-api.js';
 import { whoami } from './whoami.js';
+import {
+  deleteAutomation,
+  listAutomations,
+  MAX_SOURCE,
+  replaceWorkspace,
+  SOURCE_PATH,
+  saveAutomation,
+} from './workspace.js';
 
 type AppEnv = { Bindings: Env; Variables: AccessVars };
 type ApiEnv = {
@@ -310,12 +318,65 @@ export function createApp(opts: { accessKeys?: JWTVerifyGetKey } = {}) {
   api.get('/status', async (c) => c.json(await stubFor(c).status()));
 
   // ── M1: model, plan, apply, run ──────────────────────────────────────
+  // Refreshing the model costs inventory calls, so it's cached per location. `?refresh=1` (what
+  // `seb pull` sends) fetches a fresh one and needs editor.
   api.get('/model', async (c) => {
+    const iaid = c.get('installedAppId');
+    const refresh = c.req.query('refresh') === '1';
+    if (!refresh) {
+      const cached = await c.env.DB.prepare(
+        'SELECT model_json, fetched_at FROM model_cache WHERE installed_app_id = ?',
+      )
+        .bind(iaid)
+        .first<{ model_json: string; fetched_at: number }>();
+      if (cached) {
+        c.header('x-seb-model-fetched-at', String(cached.fetched_at));
+        return c.body(cached.model_json, 200, { 'content-type': 'application/json' });
+      }
+    } else if (!atLeast(c.get('role'), 'editor')) {
+      throw new AuthError(403, 'forbidden', 'refreshing the model needs editor');
+    }
     const m = await model(c.env, stubFor(c));
-    await c.env.DB.prepare('UPDATE installs SET location_name = ? WHERE installed_app_id = ?')
-      .bind(m.location.name, c.get('installedAppId'))
-      .run();
+    const now = Date.now();
+    await c.env.DB.batch([
+      c.env.DB.prepare('UPDATE installs SET location_name = ? WHERE installed_app_id = ?').bind(
+        m.location.name,
+        iaid,
+      ),
+      c.env.DB.prepare(
+        `INSERT INTO model_cache (installed_app_id, model_json, fetched_at) VALUES (?, ?, ?)
+         ON CONFLICT (installed_app_id) DO UPDATE SET model_json = excluded.model_json, fetched_at = excluded.fetched_at`,
+      ).bind(iaid, JSON.stringify(m), now),
+    ]);
+    c.header('x-seb-model-fetched-at', String(now));
     return c.json(m);
+  });
+
+  // ── the workspace: automations as source, edited in the web UI (ADR-006) ──
+  api.get('/automations', async (c) =>
+    c.json(await listAutomations(c.env, c.get('installedAppId'))),
+  );
+
+  const pathParam = (c: Context<ApiEnv>) => {
+    const p = decodeURIComponent(c.req.param('path') ?? '');
+    if (!SOURCE_PATH.test(p))
+      throw new PlanError('path must look like automations/<name>.ts (lowercase, digits, . _ -)');
+    return p;
+  };
+
+  api.put('/automations/:path', bodyLimit({ maxSize: MAX_SOURCE + 1024 }), async (c) => {
+    const path = pathParam(c);
+    const body = (await c.req.json().catch(() => ({}))) as { source?: unknown };
+    if (typeof body.source !== 'string' || body.source.length > MAX_SOURCE)
+      throw new PlanError('source must be a string under 100 KB');
+    await saveAutomation(c.env, c.get('installedAppId'), path, body.source, c.get('user').email);
+    return c.json({ sourcePath: path, saved: true });
+  });
+
+  api.delete('/automations/:path', async (c) => {
+    const path = pathParam(c);
+    await deleteAutomation(c.env, c.get('installedAppId'), path);
+    return c.json({ sourcePath: path, deleted: true });
   });
 
   const planOf = async (c: Context<ApiEnv>) => {
@@ -375,7 +436,12 @@ export function createApp(opts: { accessKeys?: JWTVerifyGetKey } = {}) {
         await refreshRuleMetadata(c.env, installedAppId, row.rule_id, item);
       }
     }
-    if (work.length === 0) return c.json({ installedAppId, locationId, ops, instanceId: null });
+    if (work.length === 0) {
+      await replaceWorkspace(c.env, installedAppId, req.items, req.prune, c.get('user').email);
+      return c.json({ installedAppId, locationId, ops, instanceId: null });
+    }
+    // The workspace becomes what was applied, whoever applied it (CLI or web).
+    await replaceWorkspace(c.env, installedAppId, req.items, req.prune, c.get('user').email);
     const instance = await c.env.APPLY.create({
       params: { installedAppId, locationId, ops: work },
     });

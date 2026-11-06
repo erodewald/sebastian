@@ -8,10 +8,12 @@ export function TopBar({
   snap,
   idx,
   onSettings,
+  editing,
 }: {
   snap: Snapshot;
   idx: DeviceIndex;
   onSettings: () => void;
+  editing: boolean;
 }) {
   const socket = useLive((s) => s.socket);
   const status = useLive((s) => s.status);
@@ -38,6 +40,15 @@ export function TopBar({
         sebastian
         {snap.demo && <span className="tag tag-demo">demo</span>}
       </div>
+
+      <nav className="modes" aria-label="View">
+        <a href="#live" className={editing ? '' : 'is-on'}>
+          Live
+        </a>
+        <a href="#edit" className={editing ? 'is-on' : ''}>
+          Code
+        </a>
+      </nav>
 
       <label className="loc-switch" title={`installed app ${snap.install.installedAppId}`}>
         <MapPin size={14} />

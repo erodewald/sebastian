@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import { existsSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { generate } from '@sebastian/codegen';
 import type {
   ApplyResponse,
   ApplyStatus,
@@ -16,7 +17,6 @@ import type {
   WhoamiResponse,
 } from '@sebastian/protocol';
 import { ApiError, api, type ClientConfig, configFromEnv } from './client.ts';
-import { generate } from './codegen.ts';
 import { formatApply, formatBudget, formatPlan, formatRules, formatWhoami } from './format.ts';
 import { type LoadResult, loadHome } from './load.ts';
 
@@ -35,6 +35,7 @@ Automations
   plan              Compile automations/*.ts, predict locality, diff against what's deployed
   apply [--yes]     Plan, then deploy with an ApplyWorkflow and read back where each rule runs
   rules             List managed rules and where SmartThings runs them
+  export [--force]  Write the location's automations (as edited in the web UI) to automations/
   run <path|name>   Execute a managed rule now (smoke test)
   destroy --all     Delete every managed rule
 
@@ -152,6 +153,7 @@ async function main(argv: string[]): Promise<number> {
       json: { type: 'boolean', default: false },
       yes: { type: 'boolean', short: 'y', default: false },
       all: { type: 'boolean', default: false },
+      force: { type: 'boolean', default: false },
       home: { type: 'string' },
       help: { type: 'boolean', short: 'h' },
     },
@@ -222,7 +224,7 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     }
     case 'pull': {
-      const m = await api<ModelResponse>(cfg, '/api/model');
+      const m = await api<ModelResponse>(cfg, '/api/model?refresh=1');
       const file = join(home, 'generated', 'home.generated.ts');
       await mkdir(dirname(file), { recursive: true });
       await writeFile(file, generate(m));
@@ -248,6 +250,33 @@ async function main(argv: string[]): Promise<number> {
     case 'destroy': {
       if (!values.all) throw new Error('usage: seb destroy --all  (deletes every managed rule)');
       return applyPlan(cfg, { items: [], prune: true }, new Map(), values.yes, values.json);
+    }
+    case 'export': {
+      const list = await api<{ sourcePath: string; source: string; updatedBy: string | null }[]>(
+        cfg,
+        '/api/automations',
+      );
+      let wrote = 0;
+      for (const a of list) {
+        if (!/^automations\/[a-z0-9][a-z0-9._-]{0,80}\.ts$/.test(a.sourcePath)) continue;
+        const file = join(home, a.sourcePath);
+        if (existsSync(file) && !values.force) {
+          const current = await readFile(file, 'utf8');
+          if (current !== a.source) {
+            console.log(`  differs ${a.sourcePath} (pass --force to overwrite)`);
+            continue;
+          }
+          continue;
+        }
+        await mkdir(dirname(file), { recursive: true });
+        await writeFile(file, a.source);
+        console.log(
+          `  wrote   ${a.sourcePath}${a.updatedBy ? `  (last edited by ${a.updatedBy})` : ''}`,
+        );
+        wrote++;
+      }
+      console.log(`${wrote} file(s) written from ${list.length} automation(s).`);
+      return 0;
     }
     case 'rules': {
       const rules = await api<ManagedRule[]>(cfg, '/api/rules');
