@@ -12,7 +12,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@sebastian/protocol": "workspace:*"
+    "@sebastian/protocol": "workspace:*",
+    "@sebastian/compiler": "workspace:*",
+    "@sebastian/dsl": "workspace:*",
+    "esbuild": "^0.28.0"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",

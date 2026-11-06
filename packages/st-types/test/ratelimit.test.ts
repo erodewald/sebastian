@@ -7,7 +7,7 @@ import {
   parseRateLimit,
   parseScopes,
   routeTemplate,
-} from '../src/index.js';
+} from '../src/index.ts';
 
 const headers = (o: Record<string, string>) => new Headers(o);
 

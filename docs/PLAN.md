@@ -268,7 +268,7 @@ import { Devices } from '../generated/home.generated';
 export default automation('Evening entry lights')
   .when(Devices.frontDoor.contactSensor.contact.changesTo('open'))
   .onlyIf(mode.is('Evening'), between(sunset(), at('23:00')))
-  .then(Devices.foyerLights.switchLevel.setLevel(60));
+  .do(Devices.foyerLights.switchLevel.setLevel(60));
 ```
 
 This compiles to the following (checked against core-sdk `RuleRequest` types and the Rules docs; a real POST in M1 is the final check):

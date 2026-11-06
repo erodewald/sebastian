@@ -4,14 +4,16 @@
 
 Hub-first automations-as-code for SmartThings. You write automations as typed TypeScript, Sebastian compiles them to the Rules API, lints them for **local execution on the hub**, deploys them with `plan`/`apply`, and verifies behaviour over SSE. See [`docs/PLAN.md`](docs/PLAN.md) and [`docs/platform-facts.md`](docs/platform-facts.md).
 
-**Status: M0 (foundations).** The Worker, the token vault plus metered client, OAuth, Access validation and `seb whoami` / `budget` / `status` / `resume` are in place. The DSL, compiler, Workflows and StreamDO arrive in M1–M2.
+**Status: M1 (vertical slice).** M0's Worker, token vault, metered client, OAuth and Access, plus: the DSL, the Rules compiler, a hub-aware locality linter, `seb pull` codegen, and `plan` / `apply` / `run` / `destroy` through an `ApplyWorkflow` that reads back where SmartThings actually runs each rule. StreamDO, the probe suite and verify mode are M2.
 
 ## Layout
 
 ```
 packages/st-types   SmartThings API types, rate-limit/402/429 helpers, ledger categories
-packages/protocol   zod schemas for the Worker ⇄ CLI API
-apps/worker         Hono Worker, InstallDO (token vault + stFetch + ledger), cron, D1 migrations
+packages/protocol   zod schemas for the Worker ⇄ CLI API, canonical rule hash
+packages/dsl        automation builder → plain AST; typed device/location handles
+packages/compiler   AST → Rules API JSON; locality linter
+apps/worker         Hono Worker, InstallDO (token vault + stFetch + ledger), ApplyWorkflow, cron, D1
 apps/cli            `seb` (talks only to the Worker, via Cloudflare Access)
 docs/               PLAN, platform facts, ADRs
 ```
@@ -74,6 +76,47 @@ Steps 4–9 are in order: SmartThings has to be able to reach `/st/lifecycle` be
 | `invalid_scope: unable to build scope from a+b+c`                                | Scopes joined with a literal `+`                                                    | Space-separated only (`%20`)                                |
 | `smartapps:confirm` succeeds, nothing in `wrangler tail`, target stays `PENDING` | Bot Fight Mode or WAF blocked SmartThings                                           | Step 2                                                      |
 | `create` fails: `app with this name already exists`                              | `appName` stays reserved after delete                                               | New UUID suffix on `appName`                                |
+
+## Writing automations
+
+Automations live in a separate, **private** home repo; device IDs never enter this one.
+
+```bash
+seb init ../home && cd ../home && git init          # once
+export SEB_HOME=. CF_ACCESS_CLIENT_ID=… CF_ACCESS_CLIENT_SECRET=…
+seb pull                                             # generated/home.generated.ts: typed devices + modes
+```
+
+One file per rule in `automations/`, default-exporting an automation:
+
+```ts
+// automations/pantry-light.ts
+import { automation, sleep } from '@sebastian/dsl';
+import { nookLight2, pantryDoor } from '../generated/home.generated.ts';
+
+export default automation('Pantry light')
+  .when(pantryDoor.contactSensor.contact.changesTo('open'))
+  .do(nookLight2.switch.on(), sleep(300), nookLight2.switch.off());
+```
+
+```bash
+seb plan     # compile, predict Local/Cloud/Unknown with reasons, diff against what's deployed
+seb apply    # deploy via ApplyWorkflow; reports where SmartThings actually runs each rule
+seb run pantry-light.ts   # execute it now
+seb rules    # what's managed and where it runs
+seb destroy --all
+```
+
+- **DSL:**
+  - `.when()` takes a device or mode condition (it fires on the change) or `every.day(at('07:00'))` / `every.on(['Mon'], …)`.
+  - `.onlyIf()` conditions never start the rule.
+  - Actions: device commands, `sleep(s)`, `Home.mode.set('Night')`, `ifThen(cond, [...], [...])`, plus `.otherwise(...)`.
+  - Unlock, open and disarm commands need `.allowDangerous('reason')`.
+- **Locality:**
+  - A rule is predicted **Local** only when every device runs on the same hub and every operation is known to run on the hub.
+  - Mode conditions, time windows, sunrise/sunset and mode changes start as **Unknown** until the M2 probe suite measures them.
+  - A rule mixing devices from two hubs is **Cloud**.
+  - `apply` flags any rule whose actual location contradicts the prediction.
 
 ## Invariants
 

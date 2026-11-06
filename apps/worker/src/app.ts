@@ -1,10 +1,21 @@
+import {
+  type ApplyStatus,
+  type ManagedRule,
+  type PlanItem,
+  PlanRequest,
+} from '@sebastian/protocol';
 import { authorizeUrl, type InstalledApp, parseScopes } from '@sebastian/st-types';
 import { type Context, Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import type { JWTVerifyGetKey } from 'jose';
 import { type AccessVars, accessAuth } from './access.js';
+import type { ApplyOp } from './apply-workflow.js';
 import { type Env, installStub, OAUTH_DO_NAME } from './env.js';
 import { SEB_ERR, sebErrorCode } from './install-do.js';
 import { LIFECYCLE_PATH, registerLifecycle } from './lifecycle.js';
+import { model } from './model.js';
+import { diff, managedRows, PlanError, verifyItems } from './plan.js';
+import { executeRule } from './rules.js';
 import { st } from './st-client.js';
 import { whoami } from './whoami.js';
 
@@ -34,7 +45,7 @@ export function createApp(opts: { accessKeys?: JWTVerifyGetKey } = {}) {
         ? 503
         : code === SEB_ERR.NEEDS_REAUTH || code === SEB_ERR.NOT_INSTALLED
           ? 409
-          : code === SEB_ERR.BAD_STATE
+          : code === SEB_ERR.BAD_STATE || err instanceof PlanError
             ? 400
             : 500;
     console.error(JSON.stringify({ err: err.message, code }));
@@ -133,6 +144,94 @@ export function createApp(opts: { accessKeys?: JWTVerifyGetKey } = {}) {
     return c.json(await stubFor(c).budget());
   });
   api.get('/status', async (c) => c.json(await stubFor(c).status()));
+
+  // ── M1: model, plan, apply, run ──────────────────────────────────────
+  api.get('/model', async (c) => c.json(await model(c.env, stubFor(c))));
+
+  const planOf = async (c: Context<ApiEnv>) => {
+    const parsed = PlanRequest.safeParse(await c.req.json().catch(() => undefined));
+    if (!parsed.success)
+      throw new PlanError(
+        parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '),
+      );
+    await verifyItems(parsed.data.items);
+    const status = await stubFor(c).status();
+    if (!status.locationId) throw new PlanError('install has no location; re-run OAuth');
+    const rows = await managedRows(c.env, c.get('installedAppId'));
+    return { req: parsed.data, locationId: status.locationId, ops: diff(parsed.data, rows) };
+  };
+
+  api.post('/plan', bodyLimit({ maxSize: 1024 * 1024 }), async (c) => {
+    const { locationId, ops } = await planOf(c);
+    return c.json({ installedAppId: c.get('installedAppId'), locationId, ops });
+  });
+
+  api.post('/apply', bodyLimit({ maxSize: 1024 * 1024 }), async (c) => {
+    const installedAppId = c.get('installedAppId');
+    const stub = stubFor(c);
+    const last = await stub.lastApply();
+    if (last) {
+      const s = await c.env.APPLY.get(last)
+        .then((i) => i.status())
+        .catch(() => undefined);
+      if (s && ['queued', 'running', 'waiting', 'paused', 'waitingForPause'].includes(s.status)) {
+        return c.json(
+          { error: 'apply_in_progress', detail: `instance ${last} is ${s.status}` },
+          409,
+        );
+      }
+    }
+    const { req, locationId, ops } = await planOf(c);
+    const items = new Map<string, PlanItem>(req.items.map((i) => [i.sourcePath, i]));
+    const work: ApplyOp[] = ops.flatMap((o): ApplyOp[] => {
+      const item = items.get(o.sourcePath);
+      if (o.op === 'create' && item) return [{ op: 'create', item }];
+      if (o.op === 'update' && item && o.ruleId) return [{ op: 'update', ruleId: o.ruleId, item }];
+      if (o.op === 'delete' && o.ruleId)
+        return [{ op: 'delete', ruleId: o.ruleId, sourcePath: o.sourcePath }];
+      return [];
+    });
+    if (work.length === 0) return c.json({ installedAppId, locationId, ops, instanceId: null });
+    const instance = await c.env.APPLY.create({
+      params: { installedAppId, locationId, ops: work },
+    });
+    await stub.setLastApply(instance.id);
+    return c.json({ installedAppId, locationId, ops, instanceId: instance.id }, 202);
+  });
+
+  api.get('/apply/:id', async (c) => {
+    const id = c.req.param('id');
+    const s = await c.env.APPLY.get(id).then((i) => i.status());
+    const body: ApplyStatus = {
+      instanceId: id,
+      status: s.status,
+      ...(Array.isArray(s.output) ? { results: s.output as ApplyStatus['results'] } : {}),
+      ...(s.error ? { error: `${s.error.name}: ${s.error.message}` } : {}),
+    };
+    return c.json(body);
+  });
+
+  api.get('/rules', async (c) => {
+    const rows = await managedRows(c.env, c.get('installedAppId'));
+    const out: ManagedRule[] = rows.map((r) => ({
+      ruleId: r.rule_id,
+      sourcePath: r.source_path,
+      name: String((JSON.parse(r.compiled_json) as { name?: string }).name ?? ''),
+      predicted: r.predicted_loc,
+      actual: r.actual_loc,
+      appliedAt: r.applied_at,
+    }));
+    return c.json(out);
+  });
+
+  api.post('/rules/:ruleId/execute', async (c) => {
+    const ruleId = c.req.param('ruleId');
+    const rows = await managedRows(c.env, c.get('installedAppId'));
+    if (!rows.some((r) => r.rule_id === ruleId))
+      return c.json({ error: 'not_managed', detail: ruleId }, 404);
+    const status = await stubFor(c).status();
+    return c.json(await executeRule(stubFor(c), status.locationId ?? '', ruleId));
+  });
 
   app.route('/api', api);
   return app;

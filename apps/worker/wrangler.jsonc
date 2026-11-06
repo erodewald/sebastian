@@ -13,6 +13,8 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["InstallDO"] }],
 
+  "workflows": [{ "name": "sebastian-apply", "binding": "APPLY", "class_name": "ApplyWorkflow" }],
+
   "d1_databases": [
     {
       "binding": "DB",
