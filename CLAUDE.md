@@ -25,18 +25,21 @@ pnpm --filter @sebastian/web dev          # UI on demo data: http://localhost:51
 
 Breaking one of these is a blocker, even if `pnpm check` passes.
 
-- `InstallDO.stFetch()` is the only path to SmartThings, so every call reaches the ledger. `pnpm lint` fails if a SmartThings host appears elsewhere. Don't add `seb-allow-st-host` to get around it.
+- All SmartThings calls live in `InstallDO`, and new API calls go through `InstallDO.stFetch()`, which meters them and checks breakers. `pnpm lint` fails if a SmartThings host appears elsewhere. Don't add `seb-allow-st-host` to get around it. There are four deliberate exceptions, and a change to one has to keep its accounting:
+  - `sseOpen()` is metered as `verify` and checks breakers.
+  - `tokenEndpoint()` and `confirmRegistration()` are metered as `auth` and skip breakers.
+  - `signingKey()` fetches from `key.smartthings.com`, and is neither metered nor breaker-checked.
 - InstallDO is the single token owner. A new refresh token is written to storage before the new access token is used. `invalid_grant` moves the install to `NEEDS_REAUTH` and does not retry.
 - `SEB_HALTED` and `SEB_BREAKER` are deliberate quota protections (`docs/PLAN.md` §7), not bugs. Never loosen, bypass or silence them to make an error go away.
 - Compilation happens on the client. The Worker never executes automation code. The web editor compiles in a sandboxed iframe (ADR-006).
 - Every route stays behind Cloudflare Access and JWT validation. The only public path is `/st/lifecycle`, and the Access rules for it live outside this repo.
-- Unlock, open and disarm commands require `.allowDangerous('reason')`.
+- Unlock, open and disarm commands require `.allowDangerous('reason')`. Only the compiler enforces this. The Worker can't, because compiled rules carry no allowance field, so `/api/apply` accepts a dangerous rule from any caller that compiled it another way.
 - This repo is public. Device IDs, location IDs, personal automations, tokens and secrets never go in code, tests, docs, issues or PRs. They belong in the private `home` repo or Worker secrets.
 - CI never holds SmartThings credentials.
 
 ## Change rules
 
-- `docs/PLAN.md`'s testing section is the guide: add unit tests with Vitest and Workers-runtime tests with `@cloudflare/vitest-pool-workers` for Durable Object and Workflow behavior.
+- `docs/PLAN.md`'s testing section is the guide: add unit tests with Vitest and Workers-runtime tests with `@cloudflare/vitest-plugin` for Durable Object and Workflow behavior.
 - SmartThings calls in tests are faked. Lab tests against real devices run locally and never in CI.
 - D1 migrations go in `apps/worker/migrations/` with the next number. `deploy.yml` applies them before the new Worker goes live, so a migration has to work with the code that is currently running. Never edit a migration that has shipped.
 - Every SmartThings call counts against a shared monthly quota. New calls need a ledger category and a reason they fit the budget in `docs/PLAN.md` §7.

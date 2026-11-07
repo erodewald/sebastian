@@ -10,7 +10,7 @@ const ALLOW = new Set([
   'apps/worker/src/install-do.ts', // the metered client
 ]);
 const SCAN = ['apps', 'packages'];
-const PATTERN = /smartthings\.com|ST_API_ORIGIN|ST_AUTH_ORIGIN/;
+const PATTERN = /smartthings\.com|ST_API_ORIGIN|ST_AUTH_ORIGIN|ST_KEY_ORIGIN|signingKeyUrl/;
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.wrangler', 'test']);
 
 const offenders = [];
