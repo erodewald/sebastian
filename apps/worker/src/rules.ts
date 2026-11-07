@@ -121,8 +121,9 @@ export async function recordRule(
 ): Promise<void> {
   await env.DB.prepare(
     `INSERT OR REPLACE INTO rules_managed
-     (rule_id, installed_app_id, source_path, source_hash, compiled_hash, predicted_loc, actual_loc, applied_at, compiled_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (rule_id, installed_app_id, source_path, source_hash, compiled_hash, predicted_loc, actual_loc, applied_at, compiled_json,
+      source_text, reasons_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       ruleId,
@@ -134,6 +135,33 @@ export async function recordRule(
       actual ?? null,
       Date.now(),
       JSON.stringify(item.rule),
+      item.source ?? null,
+      JSON.stringify(item.reasons),
+    )
+    .run();
+}
+
+/**
+ * For rules whose compiled JSON didn't change (no SmartThings call needed), still refresh the
+ * stored source and locality reasons: a comment-only edit, or a row from before sources were kept.
+ */
+export async function refreshRuleMetadata(
+  env: Env,
+  installedAppId: string,
+  ruleId: string,
+  item: PlanItem,
+): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE rules_managed SET source_hash = ?, source_text = ?, reasons_json = ?, predicted_loc = ?
+     WHERE installed_app_id = ? AND rule_id = ?`,
+  )
+    .bind(
+      item.sourceHash,
+      item.source ?? null,
+      JSON.stringify(item.reasons),
+      item.predicted,
+      installedAppId,
+      ruleId,
     )
     .run();
 }

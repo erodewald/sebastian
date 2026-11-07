@@ -8,7 +8,7 @@ import { ruleHash } from '@sebastian/protocol';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
-import { json, stubFor, tokens, wire } from './helpers';
+import { json, seedAccess, stubFor, tokens, wire } from './helpers';
 
 const IAID = 'ia-m1';
 const LOC = 'loc-m1';
@@ -29,6 +29,7 @@ beforeAll(async () => {
 });
 
 async function call(path: string, body?: unknown) {
+  const sebToken = await seedAccess(IAID, 'cli@x', LOC);
   const ctx = createExecutionContext();
   const res = await app.fetch(
     new Request(`https://sebastian.baltar.media${path}`, {
@@ -36,6 +37,7 @@ async function call(path: string, body?: unknown) {
       headers: {
         'cf-access-jwt-assertion': token,
         'x-seb-install': IAID,
+        'x-seb-token': sebToken,
         'content-type': 'application/json',
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),

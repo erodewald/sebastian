@@ -3,7 +3,8 @@ import { z } from 'zod';
 
 /** Wire contract between the Worker and the `seb` CLI / CI. */
 
-export const InstallState = z.enum(['ACTIVE', 'NEEDS_REAUTH', 'NONE']);
+/** DELETED: removed by the user in the SmartThings app (Linked services). */
+export const InstallState = z.enum(['ACTIVE', 'NEEDS_REAUTH', 'NONE', 'DELETED']);
 
 export const WhoamiResponse = z.object({
   installedAppId: z.string(),
@@ -87,6 +88,8 @@ export const PlanItem = z.object({
   compiledHash: z.string().regex(/^[0-9a-f]{64}$/),
   predicted: Locality,
   reasons: z.array(z.string()).max(50),
+  /** The automation's TypeScript, shown in the web UI next to the compiled rule. */
+  source: z.string().max(100_000).optional(),
 });
 export type PlanItem = z.infer<typeof PlanItem>;
 
@@ -142,5 +145,66 @@ export const ManagedRule = z.object({
   predicted: z.string().nullable(),
   actual: z.string().nullable(),
   appliedAt: z.number(),
+  /** Filled by /api/rules?detail=1 (the web UI). */
+  source: z.string().nullable().optional(),
+  rule: z.unknown().optional(),
+  reasons: z.array(z.string()).optional(),
+  deviceIds: z.array(z.string()).optional(),
 });
 export type ManagedRule = z.infer<typeof ManagedRule>;
+
+/** Inventory for the web UI, read from D1: no SmartThings calls. */
+export const DevicesResponse = z.object({
+  location: z.object({
+    locationId: z.string(),
+    hubId: z.string().nullable(),
+    hubModel: z.string().nullable(),
+    hubFw: z.string().nullable(),
+  }),
+  hubs: z.array(z.object({ hubId: z.string(), label: z.string() })),
+  devices: z.array(
+    z.object({
+      deviceId: z.string(),
+      label: z.string(),
+      roomId: z.string().nullable(),
+      integrationType: z.string(),
+      hubId: z.string().nullable(),
+      capabilities: z.array(z.string()),
+    }),
+  ),
+});
+export type DevicesResponse = z.infer<typeof DevicesResponse>;
+
+/** Messages on the /api/stream WebSocket (StreamDO → browser). */
+export type StreamMessage =
+  | {
+      type: 'status';
+      state: 'idle' | 'connecting' | 'streaming' | 'reconnecting' | 'error';
+      subscriptionId?: string;
+      deviceIds: string[];
+      detail?: string;
+      /** Recent failures, newest first (persisted across restarts). */
+      errors?: { at: number; detail: string }[];
+      /** When an errored stream will try again. */
+      retryAt?: number;
+      /** Set when the SmartThings install itself is gone. */
+      install?: 'DELETED';
+      at: number;
+    }
+  | {
+      type: 'event';
+      eventType: string;
+      /** When SmartThings says the event happened (its clock). */
+      eventTime: number;
+      /** When StreamDO read it off the SSE stream (Cloudflare's clock). */
+      streamAt: number;
+      eventId?: string;
+      deviceId?: string;
+      component?: string;
+      capability?: string;
+      attribute?: string;
+      value?: unknown;
+      stateChange?: boolean;
+      modeId?: string;
+    }
+  | { type: 'keepalive'; at: number };

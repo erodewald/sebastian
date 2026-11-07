@@ -23,7 +23,10 @@ Sources: blog.smartthings.com (Oct 30 2026 "API Additional Details" post), devel
 
 ## SSE
 
-- POST /v1/sse/subscriptions {name, subscriptionFilters[{type: LOCATIONIDS|DEVICEIDS, value[], eventType[]}]} -> {subscriptionId, registrationUrl}
+- Source: the SSE guide, https://developer.smartthings.com/docs/service-integrations/sse-subscriptions (the public OpenAPI spec, https://swagger.api.smartthings.com/public/st-api.yml, has no SSE endpoints).
+- POST /v1/sse/subscriptions {name, subscriptionFilters[{type: LOCATIONIDS|DEVICEIDS, value[], eventType[]}]} -> {subscriptionId, registrationUrl, version, name, subscriptionFilters}. `value: ["ALL"]` matches every location the token can see (LOCATIONIDS only).
+- **Observed 2026-11-06:** `MODE_EVENT` on a `LOCATIONIDS` filter is rejected: 400 `BadRequestError`, server log `eventType MODE_EVENT not allowed for filterType LOCATIONIDS and version 20250122`. The guide lists MODE_EVENT without restriction and never mentions a version `20250122` (its response example shows `version: 1`). Reported. Sebastian subscribes to DEVICEIDS filters only.
+- Error policy (guide): 4xx other than the ones below = invalid, don't retry unchanged; 403 = subscription gone or no access, create a new one; 409 = PUT before activation; 418 = client flagged, fix before retrying; 429 and 5xx = exponential backoff with ±10–25% jitter. Prefer PUT to change filters over recreating.
 - GET registrationUrl with Accept: text/event-stream within 1 minute or it's deleted.
 - PUT to update filters (only when active), DELETE to stop.
 - Event types: DEVICE_EVENT, DEVICE_LIFECYCLE_EVENT, DEVICE_HEALTH_EVENT, INSTALLED_APP_LIFECYCLE_EVENT, LOCATION_LIFECYCLE_EVENT, MODE_EVENT, SCENE_LIFECYCLE_EVENT.
@@ -65,11 +68,13 @@ Sources: blog.smartthings.com (Oct 30 2026 "API Additional Details" post), devel
 - `smartapps:confirm` returns 202 even when delivery fails. Check `targetStatus` (`PENDING` → `CONFIRMED`).
 - Authorize `scope` is space-separated. A literal `+` gives `invalid_scope: unable to build scope from a+b`.
 - Scope combinations failing with `server_error`: `r:scenes:*`+`x:scenes:*` (each alone works; unexplained, reported). The 9 working scopes + `r:installedapps` also fails, because `r:installedapps` isn't a valid scope: the documented scope table has none, and the platform developer said to do what the Developer Center does, which offers no installed-apps scopes. It should be rejected with `invalid_scope`, not `server_error`.
-- The CLI `installedapps` list omits `API_ONLY` installs; `installedapps <id>` and `installedapps:delete <id>` work. (Whether re-authorizing without deleting creates a second install despite `singleInstance` is untested.)
-- `POST /rules/execute/{id}` needs `x:rules:*` (403 `execute-behavior-fail-invalid-scopes` without it). `x:rules:*` is not in the documented scope table.
+- The CLI `installedapps` list omits `API_ONLY` installs; `installedapps <id>` and `installedapps:delete <id>` work. Re-authorizing without deleting reuses the same `installedAppId` (`singleInstance` holds; seen 2026-11-06 when adding `x:rules:*`).
+- `POST /rules/execute/{id}` needs `x:rules:*` (403 `execute-behavior-fail-invalid-scopes` without it). `x:rules:*` is not in the documented scope table, but authorizing it together with the other 9 scopes works.
 - Rules created through the Rules API don't appear in the SmartThings mobile app.
 - First real apply (2026-11-06): contact sensor → Zigbee light on the v2 hub, with `sleep`, read back `executionLocation: Local`, as predicted.
 - An app can read its own installed app (`GET /installedapps/{id}`) without `r:installedapps`.
+- **API_ONLY installs in the docs (searched all public pages + `st-api.yml`, 2026-11-06):** only "Retrieve Installed App & Location Details" names `installedAppType: "API_ONLY"` ("for OAuth API Access apps", `classifications: ["CONNECTED_SERVICE"]`), in an example response. The OpenAPI `installedAppType` filter and `InstalledAppType` enum list only `LAMBDA_SMART_APP`/`WEBHOOK_SMART_APP`; `GET /installedapps` needs `l:installedapps`, documented nowhere else. Nothing says the default list omits API_ONLY installs, that `?installedAppType=API_ONLY` works, or that users see and remove them in the mobile app under Settings → **Linked services**.
+- Removing the app under Linked services sends the documented DELETE lifecycle event (webhook docs, "Lifecycle Events": `messageType: EVENT`, `INSTALLED_APP_LIFECYCLE_EVENT`, `lifecycle: DELETE`) to the target URL, signed per "Request Verification" (RSA-SHA256 HTTP Signature over `(request-target) digest date`; certificate at `https://key.smartthings.com{keyId}`). Sebastian verifies it, then deletes the tokens, marks the install deleted and stops the live stream.
 - CLI 3.0.0 scope picker has no `sse` and offers `r:installedapps`/`w:installedapps`, which aren't valid API Access app scopes. Docs: OAuth endpoints are documented as `https://api.smartthings.com/v1/oauth/authorize` and `/v1/oauth/token`; we (like Home Assistant) use `/oauth/authorize` and `auth-global.api.smartthings.com/oauth/token`, which work.
 - Location "Bur Oak" has two hubs: SmartThings v2 Hub (fw 000.063.00001; 11 Zigbee, 5 Z-Wave, 5 LAN devices) and a SmartThings Station (fw 000.054.00013; 1 Zigbee, 1 LAN). A rule mixing devices from both hubs can't run locally.
 

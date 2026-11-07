@@ -1,5 +1,7 @@
 # ADR-002: Automations as code; client-side compile; private `home` repo; GitOps
 
+> Amended by ADR-006 (2026-11-06): the web UI can also write automations, kept per location in D1; compiling is still client-side.
+
 **Status:** Accepted (2026-11-04)
 
 ## Decision

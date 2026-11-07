@@ -35,3 +35,20 @@ export function authorizeUrl(p: {
   // URLSearchParams would encode the spaces as `+`; build this one parameter by hand.
   return `${u.toString()}&scope=${scopes.map(encodeURIComponent).join('%20')}`;
 }
+
+/** Where SmartThings publishes the X.509 certificates that sign its webhook/lifecycle requests. */
+export const ST_KEY_ORIGIN = 'https://key.smartthings.com';
+
+/**
+ * The certificate URL for a signature's `keyId`, or undefined if the keyId isn't a plain path.
+ * The keyId comes from an unverified request, so (per the webhook docs) only plain path
+ * segments are accepted: no `..`, no empty segments, no query or fragment.
+ */
+export function signingKeyUrl(keyId: string): string | undefined {
+  if (
+    !/^(\/[A-Za-z0-9._~-]+)+$/.test(keyId) ||
+    keyId.split('/').some((s) => s === '..' || s === '.')
+  )
+    return undefined;
+  return `${ST_KEY_ORIGIN}${keyId}`;
+}

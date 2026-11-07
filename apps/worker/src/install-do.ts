@@ -13,6 +13,7 @@ import {
   routeTemplate,
   ST_API_ORIGIN,
   ST_AUTH_ORIGIN,
+  signingKeyUrl,
   type TokenResponse,
 } from '@sebastian/st-types';
 import { open, randomToken, seal, sign, verify } from './crypto.js';
@@ -32,7 +33,8 @@ import { dailyAllowance, STORM_MAX_PER_HOUR, utcDay, utcMonth } from './ledger.j
  * SmartThings hosts; scripts/check-st-fetch.mjs enforces that in CI.
  */
 
-export type TokenState = 'ACTIVE' | 'NEEDS_REAUTH' | 'NONE';
+/** DELETED: the user removed the app in SmartThings (Linked services); tokens are wiped. */
+export type TokenState = 'ACTIVE' | 'NEEDS_REAUTH' | 'NONE' | 'DELETED';
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export interface StRequest {
@@ -89,7 +91,7 @@ interface TokenRow {
   access_exp: number;
   refresh_exp: number;
   rotated_at: number;
-  state: Exclude<TokenState, 'NONE'>;
+  state: Exclude<TokenState, 'NONE' | 'DELETED'>;
   scopes: string | null;
 }
 
@@ -154,12 +156,15 @@ export class InstallDO extends DurableObject<Env> {
     accessExpiresAt: number | null;
     refreshExpiresAt: number | null;
     rotatedAt: number | null;
+    deletedAt: number | null;
   }> {
     const t = this.tokenRow();
+    const deletedAt = Number(this.getMeta('deleted_at') ?? 0) || null;
     return {
       installedAppId: this.getMeta('installed_app_id') ?? null,
       locationId: this.getMeta('location_id') ?? null,
-      tokenState: t?.state ?? 'NONE',
+      tokenState: t?.state ?? (deletedAt ? 'DELETED' : 'NONE'),
+      deletedAt,
       accessExpiresAt: t?.access_exp ?? null,
       refreshExpiresAt: t?.refresh_exp ?? null,
       rotatedAt: t?.rotated_at ?? null,
@@ -289,12 +294,57 @@ export class InstallDO extends DurableObject<Env> {
       throw new Error(`object already bound to ${bound}, refusing ${installedAppId}`);
     }
     this.setMeta('installed_app_id', installedAppId);
+    this.sql.exec("DELETE FROM meta WHERE key = 'deleted_at'");
     await this.persistTokens(installedAppId, tokens);
+  }
+
+  /**
+   * The user removed the app in SmartThings (a verified DELETE lifecycle event). Per the
+   * webhook docs' "Handling Uninstall": delete the stored tokens. Remembers when, for the UI.
+   * Ignored if the install was re-authorized after the event was signed.
+   */
+  async uninstalled(signedAt: number): Promise<boolean> {
+    const t = this.tokenRow();
+    // The Date header has 1 s precision: only a re-auth clearly after the event wins.
+    if (t && t.rotated_at - signedAt >= 1000) return false;
+    this.sql.exec('DELETE FROM tokens');
+    this.setMeta('deleted_at', String(this.now()));
+    await this.ctx.storage.sync();
+    return true;
+  }
+
+  // ─────────────────────── lifecycle signing keys ───────────────────────
+
+  private keyCache = new Map<string, { pem: string; at: number }>();
+
+  /**
+   * The certificate for a lifecycle signature's keyId, from key.smartthings.com. Cached for
+   * 3 hours: keyIds are immutable, and the docs say a few hours and never more than 24.
+   */
+  async signingKey(keyId: string): Promise<string> {
+    const url = signingKeyUrl(keyId);
+    if (!url) throw new Error('keyId is not a plain path');
+    const hit = this.keyCache.get(keyId);
+    if (hit && this.now() - hit.at < 3 * 3600_000) return hit.pem;
+    const res = await this.http(url, {
+      method: 'GET',
+      headers: { 'user-agent': this.env.USER_AGENT },
+    });
+    if (!res.ok) throw new Error(`signing key: HTTP ${res.status}`);
+    const pem = await res.text();
+    if (pem.length > 16_384) throw new Error('signing key too large');
+    this.keyCache.set(keyId, { pem, at: this.now() });
+    return pem;
   }
 
   private async currentAccessToken(): Promise<string> {
     const id = this.requireInstalledAppId();
     const t = this.tokenRow();
+    if (!t && this.getMeta('deleted_at'))
+      throw sebError(
+        SEB_ERR.NEEDS_REAUTH,
+        'Sebastian was removed in the SmartThings app (Linked services); reconnect at /oauth/start',
+      );
     if (!t) throw sebError(SEB_ERR.NOT_INSTALLED, 'no tokens');
     if (t.state === 'NEEDS_REAUTH')
       throw sebError(SEB_ERR.NEEDS_REAUTH, 'refresh token rejected; re-authorize');
@@ -390,7 +440,7 @@ export class InstallDO extends DurableObject<Env> {
   /** Cron hook: refresh proactively so the 30-day refresh token never idles out. */
   async tokenHealth(): Promise<TokenState> {
     const t = this.tokenRow();
-    if (!t) return 'NONE';
+    if (!t) return this.getMeta('deleted_at') ? 'DELETED' : 'NONE';
     if (t.state === 'ACTIVE' && t.access_exp - this.now() < 60 * 60_000) {
       try {
         // Pass the current token as "stale" to force a refresh even though it's not yet in the skew window.
@@ -476,6 +526,37 @@ export class InstallDO extends DurableObject<Env> {
         rateLimit,
       };
     }
+  }
+
+  /**
+   * Open an SSE event stream (a subscription's `registrationUrl`) and hand back its body.
+   * Only the path/query of the registration URL is used: the host is always the SmartThings API.
+   * Metered as `verify`; the caller (StreamDO) owns reading and closing the stream.
+   */
+  async sseOpen(
+    path: string,
+    query: Record<string, string> = {},
+  ): Promise<ReadableStream<Uint8Array>> {
+    if (!path.startsWith('/') || path.startsWith('//'))
+      throw new Error('path must be origin-relative');
+    this.checkBreakers('verify', 'GET', path);
+    const url = new URL(path, ST_API_ORIGIN);
+    for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
+    const token = await this.currentAccessToken();
+    const res = await this.http(url.toString(), {
+      method: 'GET',
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: 'text/event-stream',
+        'user-agent': this.env.USER_AGENT,
+      },
+    });
+    this.meter('verify', routeTemplate('GET', url.pathname), !res.ok);
+    if (!res.ok || !res.body) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`SSE activate: HTTP ${res.status} ${text.slice(0, 200)}`);
+    }
+    return res.body;
   }
 
   private checkBreakers(category: CallCategory, method: HttpMethod, path: string) {

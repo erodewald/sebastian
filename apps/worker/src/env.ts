@@ -1,10 +1,14 @@
 import type { ApplyParams } from './apply-workflow.js';
 import type { InstallDO } from './install-do.js';
+import type { StreamDO } from './stream-do.js';
 
 export interface Env {
   INSTALL: DurableObjectNamespace<InstallDO>;
   DB: D1Database;
   APPLY: Workflow<ApplyParams>;
+  STREAM: DurableObjectNamespace<StreamDO>;
+  /** The built web UI (apps/web/dist). */
+  ASSETS: Fetcher;
 
   PUBLIC_ORIGIN: string;
   ACCESS_TEAM_DOMAIN: string;

@@ -5,9 +5,11 @@ import { retention, tokenHealthAndRollup } from './cron.js';
 import type { Env } from './env.js';
 import { InstallDO as BaseInstallDO } from './install-do.js';
 import { sentryOptions } from './sentry.js';
+import { StreamDO as BaseStreamDO } from './stream-do.js';
 
 export const ApplyWorkflow = Sentry.instrumentWorkflowWithSentry(sentryOptions, BaseApplyWorkflow);
 export const InstallDO = Sentry.instrumentDurableObjectWithSentry(sentryOptions, BaseInstallDO);
+export const StreamDO = Sentry.instrumentDurableObjectWithSentry(sentryOptions, BaseStreamDO);
 
 const app = createApp();
 
