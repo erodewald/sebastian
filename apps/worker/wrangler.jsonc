@@ -3,10 +3,13 @@
   "name": "sebastian",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
+  // Sentry's SDK needs AsyncLocalStorage and diagnostics_channel.
+  "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
   "preview_urls": false,
   "routes": [{ "pattern": "sebastian.baltar.media", "custom_domain": true }],
   "observability": { "enabled": true },
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
 
   "durable_objects": {
     "bindings": [{ "name": "INSTALL", "class_name": "InstallDO" }]
@@ -48,7 +51,10 @@
     "ST_SCOPES": "r:devices:* x:devices:* r:hubs:* r:locations:* w:locations:* x:locations:* r:rules:* w:rules:* x:rules:* sse",
     // SmartThings appId (not a secret); lifecycle CONFIRMATION is accepted only for this app.
     "ST_APP_ID": "dd2a50f8-3307-445b-afc5-c9150094bcc9",
-    "USER_AGENT": "sebastian/0.0 (+https://github.com/erodewald/sebastian)"
+    "USER_AGENT": "sebastian/0.0 (+https://github.com/erodewald/sebastian)",
+    // Overridden to "development" in .dev.vars.
+    "SENTRY_ENVIRONMENT": "production"
   }
-  // Secrets (wrangler secret put): ST_CLIENT_ID, ST_CLIENT_SECRET, DATA_KEY (base64, 32 bytes)
+  // Secrets (wrangler secret put): ST_CLIENT_ID, ST_CLIENT_SECRET, DATA_KEY (base64, 32 bytes),
+  // SENTRY_DSN (optional; leaving it unset turns Sentry off)
 }

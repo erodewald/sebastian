@@ -5,6 +5,7 @@ import {
   PlanRequest,
 } from '@sebastian/protocol';
 import { authorizeUrl, type InstalledApp, parseScopes } from '@sebastian/st-types';
+import { honoMiddleware } from '@sentry/cloudflare';
 import { type Context, Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import type { JWTVerifyGetKey } from 'jose';
@@ -30,8 +31,20 @@ export async function currentInstallId(env: Env, override?: string): Promise<str
   return row?.installed_app_id;
 }
 
+/** The HTTP status for an error thrown by a handler. */
+export function errorStatus(err: unknown): number {
+  // SmartThings refused the request (bad rule, missing scope…): its message, not a 500.
+  if (err instanceof FatalRuleError) return 502;
+  const code = sebErrorCode(err);
+  if (code === SEB_ERR.HALTED || code === SEB_ERR.BREAKER) return 503;
+  if (code === SEB_ERR.NEEDS_REAUTH || code === SEB_ERR.NOT_INSTALLED) return 409;
+  if (code === SEB_ERR.BAD_STATE || err instanceof PlanError) return 400;
+  return 500;
+}
+
 export function createApp(opts: { accessKeys?: JWTVerifyGetKey } = {}) {
   const app = new Hono<AppEnv>();
+  app.use(honoMiddleware(app));
 
   // Every path requires Access except SmartThings' lifecycle target (see lifecycle.ts).
   const access = accessAuth(opts.accessKeys ? { keys: opts.accessKeys } : {});
@@ -39,22 +52,14 @@ export function createApp(opts: { accessKeys?: JWTVerifyGetKey } = {}) {
   registerLifecycle(app);
 
   app.onError((err, c) => {
+    const status = errorStatus(err);
     if (err instanceof FatalRuleError) {
-      // SmartThings refused the request (bad rule, missing scope…): its message, not a 500.
       console.error(JSON.stringify({ smartthingsRejected: err.message }));
-      return c.json({ error: 'smartthings_rejected', detail: err.message }, 502);
+      return c.json({ error: 'smartthings_rejected', detail: err.message }, status as 502);
     }
     const code = sebErrorCode(err);
-    const status =
-      code === SEB_ERR.HALTED || code === SEB_ERR.BREAKER
-        ? 503
-        : code === SEB_ERR.NEEDS_REAUTH || code === SEB_ERR.NOT_INSTALLED
-          ? 409
-          : code === SEB_ERR.BAD_STATE || err instanceof PlanError
-            ? 400
-            : 500;
     console.error(JSON.stringify({ err: err.message, code }));
-    return c.json({ error: code ?? 'internal', detail: err.message }, status);
+    return c.json({ error: code ?? 'internal', detail: err.message }, status as 400);
   });
 
   app.get('/healthz', (c) => c.json({ ok: true, identity: c.get('identity') }));
