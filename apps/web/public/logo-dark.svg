@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 64" role="img" aria-label="Sebastian">
+  <rect width="64" height="64" rx="14" fill="#3ee6b4"/>
+  <path d="M23 7 L29 17 C34 20 40 27 44 35 C46 39 48 43 49 47 C50 51 47 54 43 53 C40 52 38 50 36 47 C34 46 32 47 31 49 L33 58 L13 58 C14 48 14 36 18 26 C19 20 21 13 23 7 Z" fill="#fff"/>
+  <circle cx="34" cy="28" r="1.8" fill="#3ee6b4"/>
+  <text x="80" y="43" font-family="system-ui,-apple-system,'Segoe UI',sans-serif" font-size="32" font-weight="600" letter-spacing="-0.5" fill="#e6edf3">Sebastian</text>
+</svg>
