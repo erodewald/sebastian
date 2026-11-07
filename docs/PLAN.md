@@ -420,7 +420,7 @@ This compiles to the following (checked against core-sdk `RuleRequest` types and
 - **Unit (Vitest):** compiler golden files, linter, ledger math, StreamDO state machine against a fake SSE server (goodbye, stall, 403, 418, 429, duplicates, reordering).
 - **Workers runtime (`@cloudflare/vitest-pool-workers`):** InstallDO refresh single-flight and persist-before-use; Workflow step retries; idempotent event inserts; Access JWT validation.
 - **Lab:** a **"Sebastian Lab" room** in the home location with hub-local virtual switches and dimmers on Bur Oak, driven by commands. Integration tests run locally, are tagged `test` in the ledger, and never run in CI.
-- **CI:** lint, typecheck, unit and Workers-pool tests; `wrangler deploy` and `d1 migrations apply` on `main`. CI holds only the Cloudflare API token and Access service tokens, never SmartThings credentials.
+- **CI:** lint, typecheck, unit and Workers-pool tests; `wrangler deploy` and `d1 migrations apply` on `main`. CI holds only the Cloudflare API token, Access service tokens and a Sentry upload token, never SmartThings credentials.
 
 ## 11. Risks & spikes
 

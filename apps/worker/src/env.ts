@@ -17,12 +17,17 @@ export interface Env {
   USER_AGENT: string;
   /** SmartThings appId; CONFIRMATION messages for any other app are refused. */
   ST_APP_ID: string;
+  SENTRY_ENVIRONMENT: string;
+  /** Sets the Sentry release to the deployed Worker version. */
+  CF_VERSION_METADATA: WorkerVersionMetadata;
 
   // secrets
   ST_CLIENT_ID: string;
   ST_CLIENT_SECRET: string;
   /** base64-encoded 32-byte key; encrypts tokens at rest and signs OAuth state. */
   DATA_KEY: string;
+  /** Sentry reporting stays off until this is set. */
+  SENTRY_DSN?: string;
 }
 
 /** The InstallDO instance that holds pending OAuth `state` nonces (we don't know the installedAppId yet). */

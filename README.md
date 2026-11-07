@@ -50,9 +50,10 @@ Steps 4–9 are in order: SmartThings has to be able to reach `/st/lifecycle` be
    wrangler secret put ST_CLIENT_ID
    wrangler secret put ST_CLIENT_SECRET
    openssl rand -base64 32 | wrangler secret put DATA_KEY
-   wrangler secret list   # all three must be listed
+   wrangler secret put SENTRY_DSN   # optional: without it, Sentry reporting stays off
+   wrangler secret list   # the first three must be listed
    ```
-6. **Deploy.** Run `pnpm --filter @sebastian/worker exec wrangler d1 migrations apply sebastian --remote && pnpm --filter @sebastian/worker deploy`, or let `deploy.yml` do it on merge to `main` (repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`; the repo's default branch must be `main`).
+6. **Deploy.** Run `pnpm --filter @sebastian/worker exec wrangler d1 migrations apply sebastian --remote && pnpm --filter @sebastian/worker deploy`, or let `deploy.yml` do it on merge to `main` (repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, plus optional `SENTRY_AUTH_TOKEN` to upload source maps; the repo's default branch must be `main`).
 7. **Lifecycle bypass.** Add a second Access app with **only** a public hostname: `sebastian.baltar.media`, path `st/lifecycle`, policy **Bypass / Everyone**. Don't add a Workers row: that would bypass Access for the whole Worker. Then check both of these from outside:
 
    ```bash
