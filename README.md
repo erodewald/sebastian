@@ -126,6 +126,7 @@ seb export   # write the location's automations (incl. ones edited in the web UI
 
 - The first person to sign in is the admin. Admins connect SmartThings locations at `/oauth/start` (each one is a separate install of the same app).
 - Switch locations with the picker in the top bar. Share one under the avatar → **People**: viewer (read and live view), editor (plan, apply, run), owner (manage people). New people must also be allowed by the Access policy.
+- The Editor has a **TypeScript guide** button: a short DSL guide plus example automations you can add as new files. Device names, capabilities and enum values autocomplete as you type.
 - The CLI needs a personal token: avatar → **CLI tokens**, then `export SEB_TOKEN=…`. `seb locations` lists what you can reach; `SEB_INSTALL=<id>` picks one.
 
 ## Web UI
