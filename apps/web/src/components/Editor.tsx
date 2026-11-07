@@ -23,6 +23,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type CompileResult, Compiler } from '../compiler.ts';
 import { createEditor, type EditorHandle } from '../editor/codemirror.ts';
 import { completionSource, GENERATED } from '../editor/completion.ts';
+import { EXAMPLES, GUIDE } from '../editor/guide.ts';
 import type { Snapshot, Source } from '../source.ts';
 import { ago, ruleTitle } from '../util.ts';
 import { CodePane } from './CodePane.tsx';
@@ -46,7 +47,8 @@ type FileState = 'new' | 'changed' | 'deployed' | 'removed';
 const TEMPLATE = (name: string) => `import { automation } from '@sebastian/dsl';
 import {} from '${GENERATED}';
 
-// Start typing a device name: it's imported for you. Ctrl+Space for suggestions.
+// Automations are TypeScript. Start typing a device name: it's imported for you.
+// Ctrl+Space for suggestions; open the Guide (top right) for examples and a short DSL guide.
 export default automation('${name}')
   .when()
   .do();
@@ -83,6 +85,7 @@ export function Editor({
   const [apply, setApply] = useState<ApplyStatus>();
   const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string }>();
   const [creating, setCreating] = useState<string>();
+  const [guide, setGuide] = useState(false);
   const compiler = useRef<Compiler | undefined>(undefined);
   const editorEl = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorHandle | undefined>(undefined);
@@ -316,6 +319,16 @@ export function Editor({
     setCreating(undefined);
   };
 
+  const addExample = (id: string) => {
+    const ex = EXAMPLES.find((e) => e.id === id);
+    if (!ex) return;
+    let path = `automations/${ex.id}.ts`;
+    for (let n = 2; buffers.has(path); n++) path = `automations/${ex.id}-${n}.ts`;
+    setBuffers((m) => new Map(m).set(path, ex.source));
+    setSelected(path);
+    setGuide(false);
+  };
+
   const remove = async (path: string) => {
     if (!confirm(`Delete ${path}? Its rule is removed from SmartThings at the next apply.`)) return;
     try {
@@ -430,6 +443,14 @@ export function Editor({
             </span>
           )}
           <span className="tb-spacer" />
+          <button
+            type="button"
+            className="link small"
+            aria-pressed={guide}
+            onClick={() => setGuide((g) => !g)}
+          >
+            TypeScript guide
+          </button>
           {!canEdit && <span className="tag">read-only: viewer</span>}
           {canEdit && selected && (
             <button
@@ -452,7 +473,34 @@ export function Editor({
             </button>
           )}
         </div>
-        <div className="ed-code" ref={editorEl} />
+        {guide && (
+          <div className="ed-guide">
+            {GUIDE.map((g) => (
+              <section key={g.title}>
+                <h4>{g.title}</h4>
+                <p className="small">{g.body}</p>
+                {g.code && <pre className="mono small">{g.code}</pre>}
+              </section>
+            ))}
+            <h4>Examples</h4>
+            <p className="small muted">
+              Device names in examples are placeholders: swap them for your own.
+            </p>
+            {EXAMPLES.map((e) => (
+              <section key={e.id}>
+                <strong className="small">{e.title}</strong>{' '}
+                <span className="muted small">{e.blurb}</span>
+                <pre className="mono small">{e.source}</pre>
+                {canEdit && (
+                  <button type="button" className="link small" onClick={() => addExample(e.id)}>
+                    <FilePlus2 size={13} /> Add as new automation
+                  </button>
+                )}
+              </section>
+            ))}
+          </div>
+        )}
+        <div className="ed-code" ref={editorEl} style={guide ? { display: 'none' } : undefined} />
       </section>
 
       <aside className="ed-side">
