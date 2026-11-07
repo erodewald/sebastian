@@ -326,6 +326,7 @@ export function Editor({
     for (let n = 2; buffers.has(path); n++) path = `automations/${ex.id}-${n}.ts`;
     setBuffers((m) => new Map(m).set(path, ex.source));
     setSelected(path);
+    setGuide(false);
   };
 
   const remove = async (path: string) => {
